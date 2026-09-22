@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/planilla_campo
+    username: root
+    password: root
+
+  jpa:
+    show-sql: false
+
+app:
+  jwt:
+    secret: "cambia-esto-por-una-clave-secreta-de-al-menos-32-caracteres"
+    expiration-hours: 24

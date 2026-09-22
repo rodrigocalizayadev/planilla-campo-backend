@@ -1,0 +1,2 @@
+-- Baseline del esquema. Charset y collation globales ya configurados en docker-compose.yml.
+-- Las migraciones de negocio empiezan en V1.

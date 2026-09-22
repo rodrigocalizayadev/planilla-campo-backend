@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: planilla-campo
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+
+  jackson:
+    default-property-inclusion: non_null
+
+app:
+  jwt:
+    expiration-hours: 24
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

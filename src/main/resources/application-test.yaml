@@ -1,0 +1,8 @@
+spring:
+  jpa:
+    show-sql: false
+
+app:
+  jwt:
+    secret: "test-secret-key-must-be-at-least-32-chars-long"
+    expiration-hours: 1
