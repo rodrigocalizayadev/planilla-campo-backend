@@ -14,6 +14,14 @@ import com.planillacampo.planilla_campo.campania.dto.LoteCampaniaResponse;
 import com.planillacampo.planilla_campo.catalogo.entities.TipoInsumo;
 import com.planillacampo.planilla_campo.catalogo.entities.UnidadMedida;
 import com.planillacampo.planilla_campo.catalogo.entities.UnidadProduccion;
+import com.planillacampo.planilla_campo.catalogo.dto.CompradorRequest;
+import com.planillacampo.planilla_campo.catalogo.dto.CompradorResponse;
+import com.planillacampo.planilla_campo.catalogo.entities.ModalidadVenta;
+import com.planillacampo.planilla_campo.cosecha.dto.CosechaRequest;
+import com.planillacampo.planilla_campo.cosecha.entities.Calidad;
+import com.planillacampo.planilla_campo.costos.dto.CostoIndirectoRequest;
+import com.planillacampo.planilla_campo.costos.entities.CriterioProrrateo;
+import com.planillacampo.planilla_campo.venta.dto.VentaRequest;
 import com.planillacampo.planilla_campo.catalogo.dto.CultivoRequest;
 import com.planillacampo.planilla_campo.catalogo.dto.CultivoResponse;
 import com.planillacampo.planilla_campo.catalogo.dto.InsumoRequest;
@@ -29,7 +37,9 @@ import com.planillacampo.planilla_campo.shared.Monto;
 import com.planillacampo.planilla_campo.shared.Moneda;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
 
@@ -47,6 +57,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ReportesIntegrationTest extends IntegrationTestBase {
 
     @LocalServerPort int port;
+
+    @Autowired JdbcTemplate jdbc;
 
     RestClient client;
     String token;
@@ -217,6 +229,87 @@ class ReportesIntegrationTest extends IntegrationTestBase {
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
+    // TEST: Comparativa con varios lotes y otro cultivo en la misma campaña
+    //
+    // Las agregaciones se cargan por campaña completa; solo deben sumarse los
+    // lote-campaña del cultivo pedido.
+    //
+    //   Cebolla A (4 ha): insumo 200.000 + tarea 50.000 + directo 30.000 + parte 40.000 = 320.000
+    //   Cebolla B (6 ha): insumo 300.000 + parte 60.000                                = 360.000
+    //   Zapallo C (5 ha): insumo 1.000.000 + parte 50.000 (excluido)
+    //   Indirecto prorrateado POR_HA: 150.000 / 15 ha = 10.000 por ha
+    //
+    //   Fila Cebolla: superficie 10, costo 680.000, costoPorHa 68.000,
+    //   ingreso 500.000, margen −180.000, kg 30.000 → rendimiento 3.000
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    @Test
+    void comparativa_suma_solo_lotes_del_cultivo_con_todos_los_rubros() {
+        var cebolla = crearCultivo("Cebolla", new BigDecimal("20"));
+        var zapallo = crearCultivo("Zapallo", new BigDecimal("30"));
+        var insumo = crearInsumo("Semilla", TipoInsumo.SEMILLA, UnidadMedida.KG);
+        var comprador = crearComprador("Mercado Central");
+        var campania = crearCampania("2025/26");
+
+        var lcA = agregarLoteCampania(campania.id(), crearLote("Lote A", new BigDecimal("5.0000")).id(),
+                cebolla.id(), new BigDecimal("4.0000"));
+        var lcB = agregarLoteCampania(campania.id(), crearLote("Lote B", new BigDecimal("7.0000")).id(),
+                cebolla.id(), new BigDecimal("6.0000"));
+        var lcC = agregarLoteCampania(campania.id(), crearLote("Lote C", new BigDecimal("5.0000")).id(),
+                zapallo.id(), new BigDecimal("5.0000"));
+
+        cargarInsumo(lcA.id(), insumo.id(), new BigDecimal("2"), monto("100000"), UnidadMedida.KG);
+        cargarTarea(lcA.id(), TipoTarea.RIEGO, ModoCosto.JORNAL,
+                new BigDecimal("10"), monto("5000"), Ejecutor.JORNALERO);
+        cargarCostoIndirecto(campania.id(), lcA.id(), "Flete", monto("30000"));
+        cargarInsumo(lcB.id(), insumo.id(), new BigDecimal("3"), monto("100000"), UnidadMedida.KG);
+        cargarInsumo(lcC.id(), insumo.id(), new BigDecimal("10"), monto("100000"), UnidadMedida.KG);
+        cargarCostoIndirecto(campania.id(), null, "Canon de riego", monto("150000"));
+
+        registrarCosecha(lcA.id(), Calidad.PRIMERA, new BigDecimal("1000"));
+        registrarCosecha(lcB.id(), Calidad.PRIMERA, new BigDecimal("500"));
+        registrarCosecha(lcC.id(), Calidad.PRIMERA, new BigDecimal("2000"));
+        venderPrecioCerrado(lcA.id(), comprador.id(), new BigDecimal("500"), monto("1000"));
+        venderPrecioCerrado(lcC.id(), comprador.id(), new BigDecimal("1000"), monto("1000"));
+
+        ComparativaResponse comparativa = obtenerComparativa("Cebolla", java.util.List.of(campania.id()));
+
+        assertThat(comparativa.campanias()).hasSize(1);
+        var fila = comparativa.campanias().get(0);
+        assertThat(fila.cantidadLotes()).isEqualTo(2);
+        assertThat(fila.superficieTotalHa()).isEqualByComparingTo("10");
+        assertThat(fila.costoTotalUsd()).isEqualByComparingTo("680000");
+        assertThat(fila.costoPorHaUsd()).isEqualByComparingTo("68000");
+        assertThat(fila.ingresoRealizadoUsd()).isEqualByComparingTo("500000");
+        assertThat(fila.margenRealizadoUsd()).isEqualByComparingTo("-180000");
+        assertThat(fila.rendimientoPorHa()).isEqualByComparingTo("3000");
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // TEST: tasaDescarte no depende de la superficie
+    //
+    // La API no permite superficie 0 (@DecimalMin), pero la columna sí; se fuerza
+    // por SQL para cubrir la guarda defensiva: con cosecha y superficie 0,
+    // tasaDescarte se calcula y solo rendimientoPorHa queda null.
+    // ══════════════════════════════════════════════════════════════════════════════
+
+    @Test
+    void tasa_descarte_se_calcula_con_superficie_cero() {
+        var campania = crearCampania("2025/26");
+        var cultivo = crearCultivo("Cebolla", new BigDecimal("20"));
+        var lote = crearLote("Lote Sin Superficie", new BigDecimal("5.0000"));
+        var lc = agregarLoteCampania(campania.id(), lote.id(), cultivo.id(), new BigDecimal("2.0000"));
+        registrarCosecha(lc.id(), Calidad.DESCARTE, new BigDecimal("100"));
+
+        jdbc.update("UPDATE lote_campania SET superficie_sembrada_ha = 0 WHERE id = ?", lc.id());
+
+        var resumenLote = obtenerResumen(campania.id()).lotes().get(0);
+
+        assertThat(resumenLote.tasaDescarte()).isEqualByComparingTo("1.0000");
+        assertThat(resumenLote.rendimientoPorHa()).isNull();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
     // HELPERS
     // ══════════════════════════════════════════════════════════════════════════════
 
@@ -295,6 +388,40 @@ class ReportesIntegrationTest extends IntegrationTestBase {
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(new TareaRequest(tipo, LocalDate.of(2024, 8, 15),
                         ejecutor, modo, cantidad, null, valorUnitario, null, null))
+                .retrieve().toBodilessEntity();
+    }
+
+    private CompradorResponse crearComprador(String nombre) {
+        return client.post().uri("/api/compradores")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new CompradorRequest(nombre, null, null, null, null, null))
+                .retrieve().body(CompradorResponse.class);
+    }
+
+    private void cargarCostoIndirecto(Long campaniaId, Long lcId, String concepto, Monto importe) {
+        client.post().uri("/api/campanias/" + campaniaId + "/costos-indirectos")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new CostoIndirectoRequest(lcId, concepto, LocalDate.of(2024, 9, 1),
+                        CriterioProrrateo.POR_HA, importe, null))
+                .retrieve().toBodilessEntity();
+    }
+
+    private void registrarCosecha(Long lcId, Calidad calidad, BigDecimal cantidad) {
+        client.post().uri("/api/lote-campanias/" + lcId + "/cosechas")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new CosechaRequest(LocalDate.of(2025, 1, 10), (short) 1, calidad, cantidad, null))
+                .retrieve().toBodilessEntity();
+    }
+
+    private void venderPrecioCerrado(Long lcId, Long compradorId, BigDecimal cantidad, Monto precio) {
+        client.post().uri("/api/lote-campanias/" + lcId + "/ventas")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new VentaRequest(compradorId, Calidad.PRIMERA, ModalidadVenta.PRECIO_CERRADO,
+                        LocalDate.of(2025, 1, 20), cantidad, precio, null, null, null))
                 .retrieve().toBodilessEntity();
     }
 
