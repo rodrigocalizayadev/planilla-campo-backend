@@ -34,3 +34,6 @@ build/
 
 ### Credenciales locales ###
 application-dev.yaml
+
+### Registro de skills generado por gentle-ai ###
+.atl/
