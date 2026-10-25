@@ -77,6 +77,40 @@ public interface VentaRepository extends JpaRepository<Venta, Long> {
             """)
     BigDecimal sumImporteNetoUsdLiquidadasByLoteCampaniaIds(@Param("loteCampaniaIds") List<Long> loteCampaniaIds);
 
+    // ── Saldo por comprador ──────────────────────────────────────────────────────
+
+    /** Saldo a cobrar en ARS de un comprador: ventas a precio cerrado con cobro pendiente o parcial. */
+    @Query("""
+            SELECT COALESCE(SUM(v.importeNeto.importeArs - v.cobradoArs), 0)
+            FROM Venta v
+            WHERE v.comprador.id = :compradorId
+              AND v.loteCampania.campania.establecimiento.id = :establecimientoId
+              AND v.modalidad = com.planillacampo.planilla_campo.catalogo.entities.ModalidadVenta.PRECIO_CERRADO
+              AND v.estadoCobro <> com.planillacampo.planilla_campo.venta.entities.EstadoCobro.COBRADA
+            """)
+    BigDecimal sumSaldoArsByComprador(@Param("compradorId") Long compradorId,
+                                      @Param("establecimientoId") Long establecimientoId);
+
+    /**
+     * Unidades de consignación que un comprador todavía no liquidó, por cultivo, calidad y unidad:
+     * [cultivoId, cultivoNombre, calidad, unidad, cantidadPendiente].
+     */
+    @Query("""
+            SELECT c.id, c.nombre, v.calidad, v.unidad, SUM(v.cantidad - v.cantidadLiquidada)
+            FROM Venta v
+            JOIN v.loteCampania lc
+            JOIN lc.cultivo c
+            WHERE v.comprador.id = :compradorId
+              AND lc.campania.establecimiento.id = :establecimientoId
+              AND v.modalidad = com.planillacampo.planilla_campo.catalogo.entities.ModalidadVenta.CONSIGNACION
+              AND v.estado IN (com.planillacampo.planilla_campo.venta.entities.EstadoVenta.ENTREGADA,
+                               com.planillacampo.planilla_campo.venta.entities.EstadoVenta.PARCIAL)
+            GROUP BY c.id, c.nombre, v.calidad, v.unidad
+            ORDER BY c.nombre, v.calidad
+            """)
+    List<Object[]> sumPendienteLiquidarByComprador(@Param("compradorId") Long compradorId,
+                                                   @Param("establecimientoId") Long establecimientoId);
+
     // ── Queries de agregación por campaña completa (evitan N+1 en Reportes) ──────
 
     /** Suma de importeNeto.importeUsd de ventas LIQUIDADAS, agrupado por loteCampaniaId. */

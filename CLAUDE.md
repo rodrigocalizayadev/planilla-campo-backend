@@ -152,8 +152,8 @@ com.planillacampo
 ├── venta/
 │   ├── entities/        Venta, EstadoVenta, Cobro, EstadoCobro, LiquidacionVenta
 │   ├── repositories/    VentaRepository, CobroRepository, LiquidacionVentaRepository
-│   ├── controllers/     VentaController, CobroController, LiquidacionVentaController
-│   ├── services/        VentaService, MargenService, CobroService, LiquidacionVentaService, VentaAccesoService
+│   ├── controllers/     VentaController, CobroController, LiquidacionVentaController, SaldoCompradorController
+│   ├── services/        VentaService, MargenService, CobroService, LiquidacionVentaService, SaldoCompradorService, VentaAccesoService
 │   ├── dto/
 │   ├── VentaMapper.java
 │   ├── CobroMapper.java

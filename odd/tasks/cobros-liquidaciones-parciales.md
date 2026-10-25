@@ -18,7 +18,7 @@ Rama: `feat/cobros-liquidaciones-parciales` (desde `dev`) · Entrega: ask-on-ris
 ## Tasks
 - [x] U1 (S2-S5, S7-S9, S11) Cobros + V15 + docs — inline — 12 tests de cobros + `MigracionV15CobroTest` (backfill con datos históricos) + suite completa 104/104 OK — Risk: item 1 (migración aditiva con backfill) — commit: ver `git log` (feat(venta): cobros parciales...)
 - [x] U2 (S6-S9, S11) Tramos de liquidación + V16 + margen/reportes + docs — inline — 14 tests de tramos + `MigracionV16LiquidacionTest` + suite completa 121/121 (canónico y casos borde sin tocar) — Risk: item 1 (migración con backfill) e item 3 (queries compartidas de margen/reportes: `PARCIAL` entra al realizado; `PATCH /liquidacion` ahora crea un tramo) — commit propio: ver `git log` (feat(venta): liquidacion por tramos...)
-- [ ] U3 (S10) Saldo por comprador — inline — pendiente
+- [x] U3 (S10) Saldo por comprador — inline — 4 tests + suite completa 125/125 — Risk: none (endpoint de solo lectura; solo agrega queries nuevas) — commit: ver `git log` (feat(venta): saldo por comprador)
 
 ## Log
 - L1 (2026-10-25) Usuario: "El sistema actualmente tiene forma de guardar deudas que se tengan de insumos o pagos pendientes de cosechas?" → "El maiz por ejemplo se vende todo en unas pocas fechas al mismo comprador y este va pagando de poco al precio que este el dia del pago, asi que son muchos pagos parciales que deberian estar asociados a una sola venta o comprador. Con otros productos no es tan notorio pero si se dan los casos en que hay pagos parciales y eso deberia haber una forma de registrarlo"

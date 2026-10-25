@@ -1450,6 +1450,38 @@ Borra un tramo y recalcula la venta (`PARCIAL` o `ENTREGADA` si ya no quedan tra
 
 ---
 
+### GET /api/compradores/{id}/saldo
+
+Lo que un comprador le debe al productor, en **dos conceptos que no se mezclan**: un saldo
+exacto en plata (ventas a precio cerrado) y unidades sin liquidar (consignación). Las
+unidades no se valúan: todavía no tienen precio, y sumarlas a una estimación en un único
+número haría pasar una estimación por dato exacto.
+
+**Auth:** requiere JWT.  
+**HTTP:** 200 OK.
+
+```json
+{
+  "compradorId": 2,
+  "compradorNombre": "Acopiador Central",
+  "saldoCobrarArs": 700000.00,
+  "pendientesLiquidar": [
+    { "cultivoId": 1, "cultivoNombre": "Cebolla", "calidad": "PRIMERA", "unidad": "BOLSA", "cantidadPendiente": 50.00 },
+    { "cultivoId": 2, "cultivoNombre": "Maiz",    "calidad": "PRIMERA", "unidad": "BOLSA", "cantidadPendiente": 70.00 }
+  ]
+}
+```
+
+- `saldoCobrarArs` = Σ (`importeNeto.importeArs` − `cobradoArs`) de las ventas `PRECIO_CERRADO`
+  con `estadoCobro` distinto de `COBRADA`, de todas las campañas (incluidas las cerradas).
+- `pendientesLiquidar` = Σ (`cantidad` − `cantidadLiquidada`) de las consignaciones
+  `ENTREGADA` o `PARCIAL`, agrupado por cultivo, calidad y unidad, ordenado por cultivo.
+  La lista está acotada por la cantidad de cultivos y calidades, por eso no se pagina.
+
+**Errores:** `COMPRADOR_NO_ENCONTRADO` si no existe o no pertenece al establecimiento.
+
+---
+
 ### GET /api/lote-campanias/{id}/margen
 
 Calcula el margen del lote-campaña.
