@@ -106,7 +106,7 @@ public interface VentaRepository extends JpaRepository<Venta, Long> {
               AND v.estado IN (com.planillacampo.planilla_campo.venta.entities.EstadoVenta.ENTREGADA,
                                com.planillacampo.planilla_campo.venta.entities.EstadoVenta.PARCIAL)
             GROUP BY c.id, c.nombre, v.calidad, v.unidad
-            ORDER BY c.nombre, v.calidad
+            ORDER BY c.nombre, v.calidad, v.unidad
             """)
     List<Object[]> sumPendienteLiquidarByComprador(@Param("compradorId") Long compradorId,
                                                    @Param("establecimientoId") Long establecimientoId);

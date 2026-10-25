@@ -270,6 +270,24 @@ class LiquidacionVentaIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void patch_de_liquidacion_devuelve_el_neto_sin_redondear_como_antes_de_los_tramos() {
+        var venta = consignacion();
+
+        var spec = client.patch().uri("/api/ventas/" + venta.id() + "/liquidacion")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new LiquidacionRequest(LocalDate.of(2026, 2, 1), monto("5123.456"),
+                        monto("100.555"), null, null))
+                .retrieve();
+        var liquidada = spec.body(VentaResponse.class);
+
+        // 100 × 5.123,456 − 100,555 = 512.245,045: la respuesta lo trae completo, como antes
+        assertThat(liquidada.importeNeto().importe()).isEqualByComparingTo("512245.045");
+        assertThat(liquidada.importeNeto().importeArs()).isEqualByComparingTo("512245.045");
+        assertThat(liquidada.importeNeto().importeUsd()).isEqualByComparingTo("512245.045");
+    }
+
+    @Test
     void patch_de_liquidacion_sobre_una_parcial_liquida_solo_lo_que_falta() {
         var venta = consignacion();
         liquidar(venta.id(), "2026-01-20", "40", monto("5000"));

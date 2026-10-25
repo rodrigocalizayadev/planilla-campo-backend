@@ -1253,8 +1253,9 @@ Cada elemento de `partes`: `{ "loteCampaniaId": Long (@NotNull), "importe": Mont
 
 ### PUT /api/ventas/{id}
 
-Edita una venta **ENTREGADA** (consignación pendiente de liquidar). No se puede
-editar una venta LIQUIDADA — para eso existe el endpoint de liquidación.
+Edita una venta **ENTREGADA** (consignación pendiente de liquidar y sin tramos). No se
+puede editar una venta LIQUIDADA ni una PARCIAL (con tramos de liquidación): para eso
+existen los endpoints de liquidación.
 
 El request es idéntico al de `POST /api/lote-campanias/{id}/ventas`. La
 validación de stock excluye la cantidad actual de la propia venta antes de
@@ -1271,6 +1272,7 @@ comparar: `disponible = cosechado − ya entregado + cantidad_actual`.
 | `VENTA_NO_ENCONTRADA` | La venta no existe o no pertenece al establecimiento |
 | `CAMPANIA_CERRADA` | La campaña está cerrada |
 | `VENTA_YA_LIQUIDADA` | La venta tiene estado LIQUIDADA |
+| `VENTA_CON_PAGOS` | La venta está PARCIAL (tiene tramos de liquidación registrados) |
 | `CALIDAD_DESCARTE_NO_VENDIBLE` | `calidad = DESCARTE` |
 | `STOCK_INSUFICIENTE` | La nueva cantidad supera el stock disponible |
 | `COMPRADOR_NO_ENCONTRADO` | El comprador no existe o no pertenece al establecimiento |

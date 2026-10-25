@@ -155,7 +155,11 @@ public class Venta extends EntidadBase {
             return;
         }
 
-        importeNeto = acumular(tramos.stream().map(LiquidacionVenta::getImporteNeto).toList());
+        // Con un solo tramo el neto de la venta es exactamente el del tramo (como cuando se liquidaba
+        // de una vez); con varios se acumulan los valores ya redondeados como se persisten.
+        importeNeto = tramos.size() == 1
+                ? tramos.getFirst().getImporteNeto()
+                : acumular(tramos.stream().map(LiquidacionVenta::getImporteNeto).toList());
         boolean completa = cantidadLiquidada.compareTo(cantidad) >= 0;
         estado = completa ? EstadoVenta.LIQUIDADA : EstadoVenta.PARCIAL;
         fechaLiquidacion = completa
