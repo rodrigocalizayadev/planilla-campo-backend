@@ -313,6 +313,41 @@ class LiquidacionVentaIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void borrados_simultaneos_del_mismo_tramo_dejan_un_solo_exito_y_la_venta_consistente() throws Exception {
+        var venta = consignacion();
+        liquidar(venta.id(), "2026-02-01", "40", monto("5000"));
+        Long tramoId = idTramo(venta.id(), 0);
+        int hilos = 4;
+        var pool = Executors.newFixedThreadPool(hilos);
+        var arranque = new CountDownLatch(1);
+        List<Future<String>> resultados = new ArrayList<>();
+        for (int i = 0; i < hilos; i++) {
+            resultados.add(pool.submit(() -> {
+                arranque.await();
+                try {
+                    eliminarTramo(tramoId);
+                    return "OK";
+                } catch (HttpClientErrorException ex) {
+                    return ex.getResponseBodyAsString().contains("LIQUIDACION_NO_ENCONTRADA") ? "NO_ENCONTRADA" : "OTRO";
+                }
+            }));
+        }
+        arranque.countDown();
+        List<String> veredictos = new ArrayList<>();
+        for (Future<String> resultado : resultados) {
+            veredictos.add(resultado.get());
+        }
+        pool.shutdown();
+
+        // Uno borra; el resto recibe el error de dominio (nunca un fallo sin manejar)
+        assertThat(veredictos).containsOnly("OK", "NO_ENCONTRADA");
+        assertThat(veredictos.stream().filter("OK"::equals).count()).isEqualTo(1);
+        // La venta volvió a ENTREGADA: se pueden liquidar las 100 unidades completas
+        var liquidada = liquidar(venta.id(), "2026-02-02", "100", monto("5000"));
+        assertThat(liquidada.estado()).isEqualTo(EstadoVenta.LIQUIDADA);
+    }
+
+    @Test
     void otro_establecimiento_no_puede_liquidar_ni_borrar_tramos_ajenos() {
         var venta = consignacion();
         liquidar(venta.id(), "2026-02-01", "10", monto("5000"));

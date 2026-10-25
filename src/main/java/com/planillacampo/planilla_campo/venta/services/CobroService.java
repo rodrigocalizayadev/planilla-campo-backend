@@ -63,11 +63,11 @@ public class CobroService {
         if (monto.moneda() != Moneda.ARS) {
             throw new NegocioException("MONEDA_COBRO_INVALIDA", "El cobro debe estar en ARS");
         }
-        if (monto.importe().signum() <= 0) {
+        // Se valida el importe ya redondeado a 2 decimales: así se persiste, y 0,004 quedaría en cero
+        BigDecimal importe = monto.importeArsRedondeado();
+        if (importe.signum() <= 0) {
             throw new NegocioException("COBRO_MONTO_INVALIDO", "El monto del cobro debe ser positivo");
         }
-
-        BigDecimal importe = monto.importeArsRedondeado();
         BigDecimal saldo = venta.getSaldoArs();
         if (importe.compareTo(saldo) > 0) {
             throw new NegocioException("COBRO_EXCEDE_SALDO",
@@ -103,6 +103,9 @@ public class CobroService {
         Cobro cobro = cobroRepository.findByIdAndEstablecimientoId(cobroId, establecimientoId)
                 .orElseThrow(() -> new NegocioException("COBRO_NO_ENCONTRADO", "Cobro no encontrado"));
         Venta venta = ventaAcceso.buscarBloqueada(establecimientoId, cobro.getVenta().getId());
+        // Otro borrado simultáneo pudo ganar el lock y eliminarlo: relectura bloqueante
+        cobroRepository.findByIdForUpdate(cobroId)
+                .orElseThrow(() -> new NegocioException("COBRO_NO_ENCONTRADO", "Cobro no encontrado"));
 
         venta.setCobradoArs(venta.getCobradoArs().subtract(cobro.getMonto().importeArsRedondeado()));
         venta.recalcularEstadoCobro();

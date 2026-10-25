@@ -198,6 +198,53 @@ class CobroIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void cobro_que_redondea_a_cero_es_rechazado_con_su_propio_error() {
+        var venta = registrarVenta(ModalidadVenta.PRECIO_CERRADO, monto("5000"));
+
+        // 0,004 se persiste como 0,00: se valida el importe ya redondeado
+        var spec = cobroSpec(venta.id(), "2025-12-10", monto("0.004"));
+        assertThatThrownBy(spec::toBodilessEntity)
+                .isInstanceOf(HttpClientErrorException.class)
+                .extracting(ex -> ((HttpClientErrorException) ex).getResponseBodyAsString())
+                .asString().contains("COBRO_MONTO_INVALIDO");
+    }
+
+    @Test
+    void borrados_simultaneos_del_mismo_cobro_dejan_un_solo_exito_y_el_saldo_consistente() throws Exception {
+        var venta = registrarVenta(ModalidadVenta.PRECIO_CERRADO, monto("5000"));
+        cobrar(venta.id(), "2025-12-10", monto("100000"));
+        Long cobroId = primerCobroId(venta.id());
+        int hilos = 4;
+        var pool = Executors.newFixedThreadPool(hilos);
+        var arranque = new CountDownLatch(1);
+        List<Future<String>> resultados = new ArrayList<>();
+        for (int i = 0; i < hilos; i++) {
+            resultados.add(pool.submit(() -> {
+                arranque.await();
+                try {
+                    eliminarCobro(cobroId);
+                    return "OK";
+                } catch (HttpClientErrorException ex) {
+                    return ex.getResponseBodyAsString().contains("COBRO_NO_ENCONTRADO") ? "NO_ENCONTRADO" : "OTRO";
+                }
+            }));
+        }
+        arranque.countDown();
+        List<String> veredictos = new ArrayList<>();
+        for (Future<String> resultado : resultados) {
+            veredictos.add(resultado.get());
+        }
+        pool.shutdown();
+
+        // Uno borra; el resto recibe el error de dominio (nunca un fallo sin manejar)
+        assertThat(veredictos).containsOnly("OK", "NO_ENCONTRADO");
+        assertThat(veredictos.stream().filter("OK"::equals).count()).isEqualTo(1);
+        // El acumulado quedó en cero: se puede cobrar el neto completo
+        var cobrada = cobrar(venta.id(), "2025-12-11", monto("500000"));
+        assertThat(cobrada.estadoCobro()).isEqualTo(EstadoCobro.COBRADA);
+    }
+
+    @Test
     void venta_con_cobros_no_se_elimina_hasta_borrar_sus_cobros() {
         var venta = registrarVenta(ModalidadVenta.PRECIO_CERRADO, monto("5000"));
         cobrar(venta.id(), "2025-12-10", monto("1000"));

@@ -102,6 +102,9 @@ public class LiquidacionVentaService {
         LiquidacionVenta tramo = liquidacionRepository.findByIdAndEstablecimientoId(liquidacionId, establecimientoId)
                 .orElseThrow(() -> new NegocioException("LIQUIDACION_NO_ENCONTRADA", "Liquidación no encontrada"));
         Venta venta = ventaAcceso.buscarBloqueada(establecimientoId, tramo.getVenta().getId());
+        // Otro borrado simultáneo pudo ganar el lock y eliminarlo: relectura bloqueante
+        liquidacionRepository.findByIdForUpdate(liquidacionId)
+                .orElseThrow(() -> new NegocioException("LIQUIDACION_NO_ENCONTRADA", "Liquidación no encontrada"));
 
         liquidacionRepository.delete(tramo);
         venta.recalcularDesdeTramos(liquidacionRepository.findByVentaIdOrderByFechaAscIdAsc(venta.getId()));

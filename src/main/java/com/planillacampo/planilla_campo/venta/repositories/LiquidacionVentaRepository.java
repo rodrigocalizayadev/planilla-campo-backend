@@ -44,5 +44,13 @@ public interface LiquidacionVentaRepository extends JpaRepository<LiquidacionVen
     @Lock(LockModeType.PESSIMISTIC_READ)
     List<LiquidacionVenta> findByVentaIdOrderByFechaAscIdAsc(Long ventaId);
 
+    /**
+     * Relee el tramo con lock de escritura (lectura actual, no la foto de la transacción). Vacío si
+     * otro borrado simultáneo ya lo eliminó. El establecimiento ya fue validado por el servicio.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT l FROM LiquidacionVenta l WHERE l.id = :id")
+    Optional<LiquidacionVenta> findByIdForUpdate(@Param("id") Long id);
+
     boolean existsByVentaId(Long ventaId);
 }
