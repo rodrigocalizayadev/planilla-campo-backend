@@ -237,6 +237,25 @@ ingresoRealizado(LC) = Σ Venta.importeNeto donde estado = LIQUIDADA
 
 Es dinero efectivamente conocido. **Nunca incluye estimaciones.**
 
+**El ingreso realizado se mide sobre lo devengado, no sobre lo cobrado.** Una venta a
+precio cerrado entra completa al cerrarse, aunque el comprador la pague en cuotas. Los
+`Cobro` solo mueven el **saldo** (cuánto falta cobrar), nunca el margen.
+
+### 6.2.1 Cobros y saldo (precio cerrado)
+
+```
+cobradoArs(venta) = Σ Cobro.monto.importeArs
+saldoArs(venta)   = importeNeto.importeArs − cobradoArs
+```
+
+- `estadoCobro`: `PENDIENTE` si `cobradoArs = 0`, `COBRADA` si `cobradoArs ≥ importeNeto`,
+  `PARCIAL` en el medio. Se recalcula al dar de alta o de baja un cobro.
+- Un cobro que supera el saldo se rechaza (`COBRO_EXCEDE_SALDO`): `COBRADA` siempre
+  significa saldo exacto en cero.
+- El saldo se lleva en ARS sobre `importeArs` congelado; el cobro solo admite ARS.
+- Un neto `<= 0` no tiene nada que cobrar: la venta nace `COBRADA`.
+- Los cobros se cargan y borran aunque la campaña esté `CERRADA`: no tocan costos ni margen.
+
 ### 6.3 Stock y entregas pendientes
 
 ```
@@ -430,3 +449,9 @@ campaña que va bien. Un sistema que mostrara solo el realizado sería engañoso
     $2.175.000 (5,4 %), indirectos $1.200.000 (3,0 %).
 12. Dos tareas con el mismo `modoCosto = TOTAL` pero distinto `ejecutor` (carpida
     por cuadrilla y flete por contratista) → caen en rubros distintos.
+13. Cobros parciales de una venta a precio cerrado → `saldoArs` baja con cada cobro y
+    la venta pasa a `COBRADA` en cero (§6.2.1).
+14. Cobro que excede el saldo → rechazado (`COBRO_EXCEDE_SALDO`); el estado no cambia.
+15. Borrar un cobro → la venta se reabre y el saldo se restituye.
+16. Cobrar una venta → el margen realizado no cambia (se mide sobre lo devengado).
+17. Cobro o borrado de cobro con la campaña `CERRADA` → permitido; la venta sigue bloqueada.

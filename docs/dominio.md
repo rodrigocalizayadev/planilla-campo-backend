@@ -196,6 +196,12 @@ con la misma entidad `Venta`:
 Se acuerda precio antes o al momento de entregar. La venta nace con
 `estado = LIQUIDADA` y el precio cargado. El margen se conoce de inmediato.
 
+El comprador puede **pagar en cuotas** (ej. cebolla: una venta se cierra en el día a un
+valor fijo y la deuda va bajando). Cada pago es un `Cobro` sobre la venta; la venta
+nace `PENDIENTE` de cobro y pasa a `COBRADA` sola cuando el saldo llega a cero. Los
+cobros no alteran el margen (se mide sobre lo devengado) y se cargan también con la
+campaña `CERRADA`, porque los pagos llegan después del cierre.
+
 ### 10.2 Consignación
 Se entrega la mercadería **sin precio**. El consignatario la vende y liquida
 semanas después, descontando comisión, flete y gastos. La venta nace con
@@ -380,7 +386,9 @@ Reglas que el código debe garantizar:
    `estado = LIQUIDADA`, precio y `fechaLiquidacion` son obligatorios.
 5. La cantidad vendida de una calidad no puede superar la cosechada de esa
    calidad en el mismo lote-campaña.
-6. Una `Campania` en estado `CERRADA` no admite nuevos movimientos.
+6. Una `Campania` en estado `CERRADA` no admite nuevos movimientos de costo ni ventas.
+   Excepción: los `Cobro` (y, en consignación, las liquidaciones) se registran y borran
+   igual, porque son pagos tardíos.
 7. Toda consulta filtra por `establecimiento`. Sin excepción.
 8. Los costos se congelan en el movimiento: modificar el catálogo no altera
    ningún costo histórico.

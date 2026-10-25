@@ -1295,6 +1295,7 @@ Elimina una venta. Solo permitido si la campaña no está cerrada.
 |---|---|
 | `VENTA_NO_ENCONTRADA` | La venta no existe o no pertenece al establecimiento |
 | `CAMPANIA_CERRADA` | La campaña está cerrada |
+| `VENTA_CON_PAGOS` | La venta tiene cobros registrados (borrarlos primero) |
 
 (Verificado: `VentaService.eliminar`.)
 
@@ -1338,6 +1339,56 @@ Liquida una venta en consignación.
 | `VENTA_YA_LIQUIDADA` | La venta ya tiene estado `LIQUIDADA` |
 
 **Response:** `VentaResponse` actualizado con todos los campos de liquidación.
+
+---
+
+### Cobros (ventas a precio cerrado)
+
+El mecanismo de pago lo define `Venta.modalidad`: los cobros aplican a `PRECIO_CERRADO`
+(cuotas sobre un importe neto fijo). Los cobros **no alteran el margen** (se calcula
+sobre lo devengado) y se pueden cargar y borrar aunque la campaña esté `CERRADA`.
+Solo se aceptan en **ARS**.
+
+#### POST /api/ventas/{id}/cobros
+
+**Auth:** requiere JWT.  
+**HTTP:** 201 Created. Devuelve el `VentaResponse` actualizado (`estadoCobro`,
+`cobradoArs`, `saldoArs`).
+
+```json
+{
+  "fecha": "2026-01-15",
+  "monto": { "importe": 200000.0, "moneda": "ARS", "tipoCambio": 1 },
+  "comentarios": "Primera cuota"
+}
+```
+
+| Campo | Tipo | Validación |
+|---|---|---|
+| `fecha` | LocalDate | `@NotNull` |
+| `monto` | Monto | `@NotNull`, moneda `ARS`, importe `> 0` |
+| `comentarios` | String | opcional |
+
+**Errores:**
+
+| code | Condición |
+|---|---|
+| `VENTA_NO_ENCONTRADA` | La venta no existe o no pertenece al establecimiento |
+| `MODALIDAD_INVALIDA` | La venta no es `PRECIO_CERRADO` |
+| `MONEDA_COBRO_INVALIDA` | El monto no está en ARS |
+| `COBRO_MONTO_INVALIDO` | El importe no es positivo |
+| `COBRO_EXCEDE_SALDO` | El cobro supera el saldo pendiente |
+
+La venta pasa a `PARCIAL` mientras quede saldo y a `COBRADA` cuando el saldo llega a cero.
+
+#### GET /api/ventas/{id}/cobros
+
+Lista paginada (`Pageable`) de los cobros de la venta. **HTTP:** 200 OK.
+
+#### DELETE /api/cobros/{id}
+
+Borra un cobro; la venta se reabre (`PENDIENTE` o `PARCIAL`) si dejó de estar cobrada.
+**HTTP:** 200 OK con el `VentaResponse` actualizado. Error: `COBRO_NO_ENCONTRADO`.
 
 ---
 
@@ -1784,6 +1835,17 @@ consignación ya liquidada (verificado en `VentaService.registrar` y `VentaMappe
 - En PRECIO_CERRADO al crear: `fechaLiquidacion = fechaEntrega`, `estado = LIQUIDADA`.
 - `flete` y `otrosGastos` pueden estar ausentes incluso en liquidadas si no se
   enviaron al crear o liquidar.
+
+**Cobro** (siempre presente `cobradoArs`; `estadoCobro` y `saldoArs` solo en
+`PRECIO_CERRADO`, ausentes en consignación):
+
+```json
+{ "estadoCobro": "PARCIAL", "cobradoArs": 200000.00, "saldoArs": 649500.00 }
+```
+
+- `estadoCobro`: `PENDIENTE` (sin cobros), `PARCIAL` (queda saldo), `COBRADA` (saldo 0).
+  Una venta nueva a precio cerrado nace `PENDIENTE`.
+- `saldoArs = importeNeto.importeArs − cobradoArs`.
 
 (Verificado: `VentaResponse.java`, `VentaService.registrar`, `VentaService.liquidar`.)
 

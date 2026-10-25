@@ -150,12 +150,13 @@ com.planillacampo
 │   ├── dto/
 │   └── CosechaMapper.java
 ├── venta/
-│   ├── entities/        Venta, EstadoVenta
-│   ├── repositories/    VentaRepository
-│   ├── controllers/     VentaController
-│   ├── services/        VentaService, MargenService
+│   ├── entities/        Venta, EstadoVenta, Cobro, EstadoCobro
+│   ├── repositories/    VentaRepository, CobroRepository
+│   ├── controllers/     VentaController, CobroController
+│   ├── services/        VentaService, MargenService, CobroService
 │   ├── dto/
-│   └── VentaMapper.java
+│   ├── VentaMapper.java
+│   └── CobroMapper.java
 ├── reportes/            cálculo de costos, márgenes, comparativas
 │   ├── controllers/     ReportesController
 │   ├── services/        ReportesService

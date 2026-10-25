@@ -341,6 +341,11 @@ Un `lote_campania` tiene **N** filas: una por combinación corte × calidad.
 | `flete_*` | `Monto` | nullable |
 | `otros_gastos_*` | `Monto` | nullable |
 | `importe_neto_*` | `Monto` | nullable |
+| `cobrado_ars` | `DECIMAL(20,2)` | `NOT NULL`, default `0`. Σ `importeArs` de sus `cobro` |
+| `estado_cobro` | `VARCHAR(20)` | nullable. `PENDIENTE` / `PARCIAL` / `COBRADA`; `NULL` en consignación |
+
+`estado_cobro` se deriva de `cobrado_ars` contra `importe_neto_importe_ars`; no se
+setea a mano. El saldo es `importe_neto_importe_ars − cobrado_ars`.
 
 Reglas de estado (validadas en servicio, no solo en base):
 
@@ -352,6 +357,27 @@ Reglas de estado (validadas en servicio, no solo en base):
 - `DESCARTE` no se vende: rechazar ventas con esa calidad.
 
 Índice `(lote_campania_id, estado)`.
+
+### 3.15 `cobro`
+
+Pago parcial recibido contra una venta a **precio cerrado** (V15). El mecanismo de
+pago lo define `venta.modalidad`: `PRECIO_CERRADO` admite cobros; `CONSIGNACION`
+no (se liquida por tramos).
+
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| `id` | `BIGINT` | PK |
+| `venta_id` | `BIGINT` | FK, `NOT NULL` |
+| `fecha` | `DATE` | `NOT NULL` |
+| `monto_*` | `Monto` | `NOT NULL`; `monto_importe > 0` |
+| `comentarios` | `TEXT` | nullable |
+
+- Solo se aceptan cobros en **ARS** (`MONEDA_COBRO_INVALIDA`).
+- Un cobro que supera el saldo se rechaza (`COBRO_EXCEDE_SALDO`).
+- Se cargan y se borran aunque la campaña esté `CERRADA`: no alteran costos ni margen.
+- No hay `CascadeType.REMOVE`: una venta con cobros no se elimina (`VENTA_CON_PAGOS`).
+
+Índice `(venta_id)`.
 
 ---
 
@@ -370,6 +396,7 @@ lote_campania 1──n aplicacion_insumo n──1 insumo
 lote_campania 1──n tarea
 lote_campania 1──n cosecha
 lote_campania 1──n venta n──1 comprador
+venta 1──n cobro
 lote_campania 0..1──n costo_indirecto n──1 campania
 costo_indirecto 1──n costo_indirecto_parte n──1 lote_campania
 ```
@@ -399,6 +426,8 @@ declarados explícitamente en cada `CREATE TABLE`.
 | `V11__monto_importe_ars.sql` | agrega `*_importe_ars` a todos los `Monto` de movimientos; backfill desde `importe` y `tipo_cambio` |
 | `V12__campania_cotizacion_vigente.sql` | agrega `cotizacion_vigente DECIMAL(12,6) NULL` a `campania` |
 | `V13__cultivo_precio_referencia_sin_tc.sql` | elimina `tipo_cambio` e `importe_usd` de `precio_referencia_primera/segunda` en `cultivo` |
+| `V14__ampliar_precision_montos_cantidades.sql` | amplía la precisión de montos y cantidades |
+| `V15__cobro_venta.sql` | tabla `cobro`; agrega `cobrado_ars` y `estado_cobro` a `venta`; migra las ventas a precio cerrado existentes como `COBRADA` con un cobro por el total en `fecha_entrega` |
 
 Una migración por slice del plan. Las aplicadas no se editan nunca: toda
 corrección es una versión nueva.

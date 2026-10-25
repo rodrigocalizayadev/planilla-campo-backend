@@ -108,4 +108,37 @@ public class Venta extends EntidadBase {
     @AttributeOverride(name = "importeArs", column = @Column(name = "importe_neto_importe_ars"))
     @Nullable
     private Monto importeNeto;
+
+    /** Acumulado cobrado en ARS (suma de los importeArs de sus cobros). Solo PRECIO_CERRADO. */
+    @Column(name = "cobrado_ars", nullable = false, precision = 20, scale = 2)
+    private BigDecimal cobradoArs = BigDecimal.ZERO;
+
+    /** Derivado de cobradoArs contra el importe neto. null en consignación. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado_cobro", length = 20)
+    @Nullable
+    private EstadoCobro estadoCobro;
+
+    /** Saldo pendiente de cobro en ARS. null en consignación o si aún no hay importe neto. */
+    public @Nullable BigDecimal getSaldoArs() {
+        if (estadoCobro == null || importeNeto == null) {
+            return null;
+        }
+        return importeNeto.importeArsRedondeado().subtract(cobradoArs).max(BigDecimal.ZERO);
+    }
+
+    /**
+     * Recalcula estadoCobro a partir de cobradoArs: PENDIENTE sin cobros, PARCIAL mientras
+     * quede saldo y COBRADA cuando se cubre el neto. Un neto <= 0 no tiene nada que cobrar.
+     */
+    public void recalcularEstadoCobro() {
+        BigDecimal neto = importeNeto.importeArsRedondeado();
+        if (cobradoArs.signum() == 0 && neto.signum() > 0) {
+            estadoCobro = EstadoCobro.PENDIENTE;
+        } else if (cobradoArs.compareTo(neto) >= 0) {
+            estadoCobro = EstadoCobro.COBRADA;
+        } else {
+            estadoCobro = EstadoCobro.PARCIAL;
+        }
+    }
 }
