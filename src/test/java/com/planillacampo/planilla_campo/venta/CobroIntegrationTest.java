@@ -35,8 +35,12 @@ import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -107,6 +111,41 @@ class CobroIntegrationTest extends IntegrationTestBase {
 
         var cobros = listarCobros(venta.id());
         assertThat(cobros).extractingByKey("content", as(LIST)).hasSize(1);
+    }
+
+    @Test
+    void cobros_simultaneos_se_serializan_y_nunca_exceden_el_saldo() throws Exception {
+        var venta = registrarVenta(ModalidadVenta.PRECIO_CERRADO, monto("5000")); // neto 500.000
+        int hilos = 8;
+        var pool = Executors.newFixedThreadPool(hilos);
+        var arranque = new CountDownLatch(1);
+        List<Future<Boolean>> resultados = new ArrayList<>();
+        for (int i = 0; i < hilos; i++) {
+            resultados.add(pool.submit(() -> {
+                arranque.await();
+                try {
+                    cobrar(venta.id(), "2025-12-10", monto("100000"));
+                    return true;
+                } catch (HttpClientErrorException ex) {
+                    return false;
+                }
+            }));
+        }
+        arranque.countDown();
+        int aceptados = 0;
+        for (Future<Boolean> resultado : resultados) {
+            if (resultado.get()) aceptados++;
+        }
+        pool.shutdown();
+
+        // 8 × 100.000 contra un saldo de 500.000: entran exactamente 5
+        assertThat(aceptados).isEqualTo(5);
+        assertThat(listarCobros(venta.id())).extractingByKey("content", as(LIST)).hasSize(5);
+        var spec = cobroSpec(venta.id(), "2025-12-11", monto("0.01"));
+        assertThatThrownBy(spec::toBodilessEntity)
+                .isInstanceOf(HttpClientErrorException.class)
+                .extracting(ex -> ((HttpClientErrorException) ex).getResponseBodyAsString())
+                .asString().contains("COBRO_EXCEDE_SALDO");
     }
 
     @Test
