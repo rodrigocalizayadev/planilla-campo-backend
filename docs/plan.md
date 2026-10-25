@@ -171,7 +171,9 @@ El mecanismo de pago lo define `Venta.modalidad`, no el cultivo.
   `PENDIENTE`/`PARCIAL`/`COBRADA` y `saldoArs` (migración `V15`). Endpoints
   `POST|GET /api/ventas/{id}/cobros` y `DELETE /api/cobros/{id}`.
 - **Consignación (maíz)**: liquidación por tramos (kg × precio del día) con estado
-  `PARCIAL` (migración `V16`).
+  `PARCIAL` (migración `V16`). Endpoints `POST|GET /api/ventas/{id}/liquidaciones` y
+  `DELETE /api/liquidaciones/{id}`; `PATCH /api/ventas/{id}/liquidacion` se mantiene
+  (liquida de una vez lo que falte).
 - Saldo por comprador: `GET /api/compradores/{id}/saldo`.
 - Los cobros y tramos se registran también con la campaña `CERRADA`.
 

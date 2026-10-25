@@ -2,21 +2,18 @@ package com.planillacampo.planilla_campo.venta.services;
 
 import com.planillacampo.planilla_campo.auth.entities.Usuario;
 import com.planillacampo.planilla_campo.catalogo.entities.ModalidadVenta;
-import com.planillacampo.planilla_campo.establecimiento.repositories.EstablecimientoRepository;
 import com.planillacampo.planilla_campo.shared.Moneda;
 import com.planillacampo.planilla_campo.shared.Monto;
 import com.planillacampo.planilla_campo.shared.NegocioException;
 import com.planillacampo.planilla_campo.venta.CobroMapper;
+import com.planillacampo.planilla_campo.venta.VentaMapper;
 import com.planillacampo.planilla_campo.venta.dto.CobroRequest;
 import com.planillacampo.planilla_campo.venta.dto.CobroResponse;
 import com.planillacampo.planilla_campo.venta.dto.VentaResponse;
-import com.planillacampo.planilla_campo.venta.VentaMapper;
 import com.planillacampo.planilla_campo.venta.entities.Cobro;
 import com.planillacampo.planilla_campo.venta.entities.Venta;
 import com.planillacampo.planilla_campo.venta.repositories.CobroRepository;
 import com.planillacampo.planilla_campo.venta.repositories.VentaRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.LockModeType;
 import org.jspecify.annotations.NonNull;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -36,30 +33,27 @@ public class CobroService {
 
     private final CobroRepository cobroRepository;
     private final VentaRepository ventaRepository;
-    private final EstablecimientoRepository establecimientoRepository;
+    private final VentaAccesoService ventaAcceso;
     private final CobroMapper cobroMapper;
     private final VentaMapper ventaMapper;
-    private final EntityManager entityManager;
 
     public CobroService(CobroRepository cobroRepository,
                         VentaRepository ventaRepository,
-                        EstablecimientoRepository establecimientoRepository,
+                        VentaAccesoService ventaAcceso,
                         CobroMapper cobroMapper,
-                        VentaMapper ventaMapper,
-                        EntityManager entityManager) {
+                        VentaMapper ventaMapper) {
         this.cobroRepository = cobroRepository;
         this.ventaRepository = ventaRepository;
-        this.establecimientoRepository = establecimientoRepository;
+        this.ventaAcceso = ventaAcceso;
         this.cobroMapper = cobroMapper;
         this.ventaMapper = ventaMapper;
-        this.entityManager = entityManager;
     }
 
     @Transactional
     public @NonNull VentaResponse registrar(@NonNull Usuario usuario,
                                             @NonNull Long ventaId,
                                             @NonNull CobroRequest request) {
-        Venta venta = ventaBloqueada(establecimientoId(usuario), ventaId);
+        Venta venta = ventaAcceso.buscarBloqueada(ventaAcceso.establecimientoId(usuario), ventaId);
 
         if (venta.getModalidad() != ModalidadVenta.PRECIO_CERRADO) {
             throw new NegocioException("MODALIDAD_INVALIDA",
@@ -96,9 +90,8 @@ public class CobroService {
     public @NonNull Page<CobroResponse> listar(@NonNull Usuario usuario,
                                                @NonNull Long ventaId,
                                                @NonNull Pageable pageable) {
-        Long establecimientoId = establecimientoId(usuario);
-        ventaRepository.findByIdAndEstablecimientoId(ventaId, establecimientoId)
-                .orElseThrow(() -> new NegocioException("VENTA_NO_ENCONTRADA", "Venta no encontrada"));
+        Long establecimientoId = ventaAcceso.establecimientoId(usuario);
+        ventaAcceso.buscar(establecimientoId, ventaId);
         return cobroRepository.findByVentaIdAndEstablecimientoId(ventaId, establecimientoId, pageable)
                 .map(cobroMapper::toResponse);
     }
@@ -106,31 +99,14 @@ public class CobroService {
     /** Borra un cobro y reabre la venta si dejó de estar cobrada. */
     @Transactional
     public @NonNull VentaResponse eliminar(@NonNull Usuario usuario, @NonNull Long cobroId) {
-        Long establecimientoId = establecimientoId(usuario);
+        Long establecimientoId = ventaAcceso.establecimientoId(usuario);
         Cobro cobro = cobroRepository.findByIdAndEstablecimientoId(cobroId, establecimientoId)
                 .orElseThrow(() -> new NegocioException("COBRO_NO_ENCONTRADO", "Cobro no encontrado"));
-        Venta venta = ventaBloqueada(establecimientoId, cobro.getVenta().getId());
+        Venta venta = ventaAcceso.buscarBloqueada(establecimientoId, cobro.getVenta().getId());
 
         venta.setCobradoArs(venta.getCobradoArs().subtract(cobro.getMonto().importeArsRedondeado()));
         venta.recalcularEstadoCobro();
         cobroRepository.delete(cobro);
         return ventaMapper.toResponse(ventaRepository.save(venta));
-    }
-
-    /**
-     * Carga la venta del establecimiento y la relee bajo lock de escritura: dos cobros
-     * simultáneos sobre la misma venta se serializan y no pueden exceder el saldo.
-     */
-    private Venta ventaBloqueada(Long establecimientoId, Long ventaId) {
-        Venta venta = ventaRepository.findByIdAndEstablecimientoId(ventaId, establecimientoId)
-                .orElseThrow(() -> new NegocioException("VENTA_NO_ENCONTRADA", "Venta no encontrada"));
-        entityManager.refresh(venta, LockModeType.PESSIMISTIC_WRITE);
-        return venta;
-    }
-
-    private Long establecimientoId(Usuario usuario) {
-        return establecimientoRepository.findByUsuarioId(usuario.getId())
-                .orElseThrow(() -> new NegocioException("Establecimiento no encontrado"))
-                .getId();
     }
 }

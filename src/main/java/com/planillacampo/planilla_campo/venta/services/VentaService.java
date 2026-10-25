@@ -19,6 +19,7 @@ import com.planillacampo.planilla_campo.venta.dto.VentaResponse;
 import com.planillacampo.planilla_campo.venta.entities.EstadoVenta;
 import com.planillacampo.planilla_campo.venta.entities.Venta;
 import com.planillacampo.planilla_campo.venta.repositories.CobroRepository;
+import com.planillacampo.planilla_campo.venta.repositories.LiquidacionVentaRepository;
 import com.planillacampo.planilla_campo.venta.repositories.VentaRepository;
 import org.jspecify.annotations.NonNull;
 import org.springframework.data.domain.Page;
@@ -38,6 +39,8 @@ public class VentaService {
     private final EstablecimientoRepository establecimientoRepository;
     private final VentaMapper ventaMapper;
     private final CobroRepository cobroRepository;
+    private final LiquidacionVentaRepository liquidacionRepository;
+    private final LiquidacionVentaService liquidacionVentaService;
 
     public VentaService(VentaRepository ventaRepository,
                         LoteCampaniaService loteCampaniaService,
@@ -45,8 +48,12 @@ public class VentaService {
                         CompradorRepository compradorRepository,
                         EstablecimientoRepository establecimientoRepository,
                         VentaMapper ventaMapper,
-                        CobroRepository cobroRepository) {
+                        CobroRepository cobroRepository,
+                        LiquidacionVentaRepository liquidacionRepository,
+                        LiquidacionVentaService liquidacionVentaService) {
         this.cobroRepository = cobroRepository;
+        this.liquidacionRepository = liquidacionRepository;
+        this.liquidacionVentaService = liquidacionVentaService;
         this.ventaRepository = ventaRepository;
         this.loteCampaniaService = loteCampaniaService;
         this.cosechaRepository = cosechaRepository;
@@ -152,6 +159,10 @@ public class VentaService {
             throw new NegocioException("VENTA_YA_LIQUIDADA",
                     "No se puede editar una venta ya liquidada");
         }
+        if (venta.getEstado() == EstadoVenta.PARCIAL) {
+            throw new NegocioException("VENTA_CON_PAGOS",
+                    "No se puede editar una venta con liquidaciones registradas");
+        }
         if (request.calidad() == Calidad.DESCARTE) {
             throw new NegocioException("CALIDAD_DESCARTE_NO_VENDIBLE",
                     "No se puede registrar una venta con calidad DESCARTE");
@@ -223,42 +234,20 @@ public class VentaService {
                     "No se pueden eliminar ventas de una campaña cerrada");
         }
         // Sin cascade sobre históricos: primero hay que borrar los cobros
-        if (cobroRepository.existsByVentaId(ventaId)) {
+        if (cobroRepository.existsByVentaId(ventaId) || liquidacionRepository.existsByVentaId(ventaId)) {
             throw new NegocioException("VENTA_CON_PAGOS",
-                    "No se puede eliminar una venta con cobros registrados");
+                    "No se puede eliminar una venta con cobros o liquidaciones registrados");
         }
 
         ventaRepository.delete(venta);
     }
 
+    /** Liquida de una vez lo que falte de la consignación (un tramo por la cantidad pendiente). */
     @Transactional
     public @NonNull VentaResponse liquidar(@NonNull Usuario usuario,
                                            @NonNull Long ventaId,
                                            @NonNull LiquidacionRequest request) {
-        Long establecimientoId = establecimientoId(usuario);
-        Venta venta = ventaRepository.findByIdAndEstablecimientoId(ventaId, establecimientoId)
-                .orElseThrow(() -> new NegocioException("VENTA_NO_ENCONTRADA", "Venta no encontrada"));
-
-        if (venta.getModalidad() != ModalidadVenta.CONSIGNACION) {
-            throw new NegocioException("MODALIDAD_INVALIDA",
-                    "Solo se pueden liquidar ventas en consignación");
-        }
-        if (venta.getEstado() == EstadoVenta.LIQUIDADA) {
-            throw new NegocioException("VENTA_YA_LIQUIDADA",
-                    "Esta venta ya fue liquidada");
-        }
-
-        venta.setFechaLiquidacion(request.fechaLiquidacion());
-        venta.setPrecioUnitario(request.precioUnitario());
-        venta.setComision(request.comision());
-        venta.setFlete(request.flete());
-        venta.setOtrosGastos(request.otrosGastos());
-        venta.setImporteNeto(calcularImporteNeto(venta.getCantidad(),
-                request.precioUnitario(), request.comision(),
-                request.flete(), request.otrosGastos()));
-        venta.setEstado(EstadoVenta.LIQUIDADA);
-
-        return ventaMapper.toResponse(ventaRepository.save(venta));
+        return liquidacionVentaService.liquidarPendiente(usuario, ventaId, request);
     }
 
     // ──────────────────────────────────────────────────────────────────────────────
@@ -270,11 +259,11 @@ public class VentaService {
      * Todos los Monto nullable excepto precioUnitario.
      * La moneda del neto es la moneda del precioUnitario.
      */
-    private Monto calcularImporteNeto(BigDecimal cantidad,
-                                      Monto precioUnitario,
-                                      Monto comision,
-                                      Monto flete,
-                                      Monto otrosGastos) {
+    static Monto calcularImporteNeto(BigDecimal cantidad,
+                                     Monto precioUnitario,
+                                     Monto comision,
+                                     Monto flete,
+                                     Monto otrosGastos) {
         BigDecimal bruto = cantidad.multiply(precioUnitario.importe());
 
         BigDecimal descuentos = BigDecimal.ZERO;

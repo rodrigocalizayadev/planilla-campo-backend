@@ -1295,7 +1295,7 @@ Elimina una venta. Solo permitido si la campaña no está cerrada.
 |---|---|
 | `VENTA_NO_ENCONTRADA` | La venta no existe o no pertenece al establecimiento |
 | `CAMPANIA_CERRADA` | La campaña está cerrada |
-| `VENTA_CON_PAGOS` | La venta tiene cobros registrados (borrarlos primero) |
+| `VENTA_CON_PAGOS` | La venta tiene cobros o liquidaciones registrados (borrarlos primero) |
 
 (Verificado: `VentaService.eliminar`.)
 
@@ -1303,7 +1303,10 @@ Elimina una venta. Solo permitido si la campaña no está cerrada.
 
 ### PATCH /api/ventas/{id}/liquidacion
 
-Liquida una venta en consignación.
+Liquida de una vez una venta en consignación: crea **un único tramo** por toda la cantidad
+que falte liquidar (`cantidadPendiente`) y deja la venta `LIQUIDADA`. Si ya tenía tramos
+(`PARCIAL`), liquida solo el resto. Para liquidar por partes usar
+`POST /api/ventas/{id}/liquidaciones`.
 
 **Auth:** requiere JWT.  
 **HTTP:** 200 OK.
@@ -1389,6 +1392,61 @@ Lista paginada (`Pageable`) de los cobros de la venta. **HTTP:** 200 OK.
 
 Borra un cobro; la venta se reabre (`PENDIENTE` o `PARCIAL`) si dejó de estar cobrada.
 **HTTP:** 200 OK con el `VentaResponse` actualizado. Error: `COBRO_NO_ENCONTRADO`.
+
+---
+
+### Liquidaciones por tramos (consignación)
+
+Cuando el comprador paga de a poco al precio del día (maíz: "te pago X kg al precio de
+hoy"), cada pago es un tramo con su cantidad, su precio y su fecha. Aplica a
+`CONSIGNACION`. Los tramos se pueden cargar y borrar aunque la campaña esté `CERRADA`.
+
+#### POST /api/ventas/{id}/liquidaciones
+
+**Auth:** requiere JWT.  
+**HTTP:** 201 Created. Devuelve el `VentaResponse` actualizado (`estado`, `importeNeto`,
+`cantidadLiquidada`, `cantidadPendiente`).
+
+```json
+{
+  "fecha": "2026-02-10",
+  "cantidad": 30,
+  "precioUnitario": { "importe": 5500.0, "moneda": "ARS", "tipoCambio": 1 },
+  "comision": null,
+  "flete": null,
+  "otrosGastos": null
+}
+```
+
+| Campo | Tipo | Validación |
+|---|---|---|
+| `fecha` | LocalDate | `@NotNull` |
+| `cantidad` | BigDecimal | `@NotNull`, `@Positive`; se redondea a 2 decimales |
+| `precioUnitario` | Monto | `@NotNull` |
+| `comision`, `flete`, `otrosGastos` | Monto | opcionales |
+
+**Errores:**
+
+| code | Condición |
+|---|---|
+| `VENTA_NO_ENCONTRADA` | La venta no existe o no pertenece al establecimiento |
+| `MODALIDAD_INVALIDA` | La venta no es `CONSIGNACION` |
+| `LIQUIDACION_CANTIDAD_INVALIDA` | La cantidad redondea a cero |
+| `LIQUIDACION_EXCEDE_PENDIENTE` | La cantidad supera lo que falta liquidar |
+
+La venta pasa a `PARCIAL` mientras queden unidades sin liquidar y a `LIQUIDADA` cuando se
+liquida la cantidad total. `importeNeto` es el acumulado de los tramos; `precioUnitario`
+de la venta queda ausente cuando hay más de un tramo (el precio vive en cada tramo).
+
+#### GET /api/ventas/{id}/liquidaciones
+
+Lista paginada (`Pageable`) de los tramos. Cada ítem: `id`, `ventaId`, `fecha`, `cantidad`,
+`precioUnitario`, `comision`, `flete`, `otrosGastos`, `importeNeto`. **HTTP:** 200 OK.
+
+#### DELETE /api/liquidaciones/{id}
+
+Borra un tramo y recalcula la venta (`PARCIAL` o `ENTREGADA` si ya no quedan tramos).
+**HTTP:** 200 OK con el `VentaResponse` actualizado. Error: `LIQUIDACION_NO_ENCONTRADA`.
 
 ---
 
@@ -1846,6 +1904,17 @@ consignación ya liquidada (verificado en `VentaService.registrar` y `VentaMappe
 - `estadoCobro`: `PENDIENTE` (sin cobros), `PARCIAL` (queda saldo), `COBRADA` (saldo 0).
   Una venta nueva a precio cerrado nace `PENDIENTE`.
 - `saldoArs = importeNeto.importeArs − cobradoArs`.
+
+**Liquidación por tramos** (`cantidadLiquidada` siempre presente; `cantidadPendiente` solo
+en consignación, ausente en precio cerrado):
+
+```json
+{ "estado": "PARCIAL", "cantidadLiquidada": 40.00, "cantidadPendiente": 60.00 }
+```
+
+- `estado`: `ENTREGADA` (sin tramos), `PARCIAL` (liquidada en parte), `LIQUIDADA` (cantidad total).
+- `importeNeto` es el acumulado de los tramos; `precioUnitario` solo aparece si un único
+  tramo liquidó la venta completa.
 
 (Verificado: `VentaResponse.java`, `VentaService.registrar`, `VentaService.liquidar`.)
 

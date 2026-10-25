@@ -163,10 +163,11 @@ public class MargenService {
                                                      BigDecimal gastosEst,
                                                      @Nullable BigDecimal cotizacion) {
         BigDecimal total = BigDecimal.ZERO;
-        for (Venta v : ventaRepository.findEntregadasByLoteCampaniaId(loteCampaniaId)) {
+        for (Venta v : ventaRepository.findPendientesDeLiquidarByLoteCampaniaId(loteCampaniaId)) {
             BigDecimal precioUsd = precioUsd(v.getCalidad(), precioRefPrimera, precioRefSegunda, cotizacion);
             if (precioUsd != null) {
-                total = total.add(v.getCantidad().multiply(precioUsd)
+                // Solo lo que falta liquidar: lo ya liquidado entra al ingreso realizado
+                total = total.add(v.getCantidadPendiente().multiply(precioUsd)
                         .multiply(BigDecimal.ONE.subtract(gastosEst)));
             }
         }

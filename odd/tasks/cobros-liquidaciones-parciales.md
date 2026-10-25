@@ -17,7 +17,7 @@ Rama: `feat/cobros-liquidaciones-parciales` (desde `dev`) · Entrega: ask-on-ris
 
 ## Tasks
 - [x] U1 (S2-S5, S7-S9, S11) Cobros + V15 + docs — inline — 12 tests de cobros + `MigracionV15CobroTest` (backfill con datos históricos) + suite completa 104/104 OK — Risk: item 1 (migración aditiva con backfill) — commit: ver `git log` (feat(venta): cobros parciales...)
-- [ ] U2 (S6-S9, S11) Tramos de liquidación + V16 + margen/reportes + docs — inline — commit propio (toca queries compartidas) — pendiente
+- [x] U2 (S6-S9, S11) Tramos de liquidación + V16 + margen/reportes + docs — inline — 14 tests de tramos + `MigracionV16LiquidacionTest` + suite completa 121/121 (canónico y casos borde sin tocar) — Risk: item 1 (migración con backfill) e item 3 (queries compartidas de margen/reportes: `PARCIAL` entra al realizado; `PATCH /liquidacion` ahora crea un tramo) — commit propio: ver `git log` (feat(venta): liquidacion por tramos...)
 - [ ] U3 (S10) Saldo por comprador — inline — pendiente
 
 ## Log
@@ -32,4 +32,6 @@ Rama: `feat/cobros-liquidaciones-parciales` (desde `dev`) · Entrega: ask-on-ris
 - Consecuencia de S5: una venta histórica PRECIO_CERRADO ahora tiene un cobro sintético y para eliminarla hay que borrar antes el cobro (`VENTA_CON_PAGOS`).
 - Verificación U1: primer intento con Docker apagado (22 errores de entorno). Segundo intento falló por una `V15__fix_venta_precision_ampliar.sql` obsoleta que solo existía en `target/classes` (ni en `src` ni en git; su contenido ya está en V14); se resolvió con `./mvnw clean`. Resultado final: CobroIntegrationTest 12/12, VentaIntegrationTest 10/10 (canónico sin tocar), MigracionV15CobroTest 1/1, suite completa 104/104.
 - Aviso: si la base de desarrollo local ya aplicó esa `V15__fix_venta_precision_ampliar`, Flyway va a rechazar mi `V15__cobro_venta` en esa base (versión repetida). Hay que verificarlo en `flyway_schema_history` antes de levantar la app local.
+- Hallazgo U2 (RED→GREEN observado): `tramos_simultaneos_se_serializan...` aceptó 8 tramos de 20 sobre 100 pendientes. Causa: tras bloquear la venta releía los tramos con una lectura normal, que en REPEATABLE READ devuelve la foto previa al lock y pisaba `cantidadLiquidada`. Corrección: `@Lock(PESSIMISTIC_READ)` en `findByVentaIdOrderByFechaAscIdAsc` (lectura actual). Resultado: exactamente 5, repetido 3 veces sin fallos. Los cobros no tenían el problema (suman de forma incremental sobre la fila bloqueada).
+- Refactor en U2: `VentaAccesoService` centraliza establecimiento + lock; `CobroService` lo usa.
 - Route: inline en las 3 unidades. Sin writer trigger (unidades secuenciales y dependientes, no paralelas).

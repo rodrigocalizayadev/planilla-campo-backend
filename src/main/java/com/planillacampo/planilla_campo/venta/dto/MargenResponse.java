@@ -17,10 +17,10 @@ import java.math.BigDecimal;
  */
 public record MargenResponse(
 
-        /** Σ importeNeto.importeUsd de ventas LIQUIDADAS. Criterio histórico. */
+        /** Σ importeNeto.importeUsd de ventas PARCIAL y LIQUIDADAS (tramos ya liquidados). Criterio histórico. */
         BigDecimal ingresoRealizadoUsd,
 
-        /** Σ importeNeto.importeArs de ventas LIQUIDADAS. Criterio histórico. */
+        /** Σ importeNeto.importeArs de ventas PARCIAL y LIQUIDADAS (tramos ya liquidados). Criterio histórico. */
         BigDecimal ingresoRealizadoArs,
 
         /** Valorización de consignaciones pendientes de liquidar, en USD. Criterio corriente. Estimado. */

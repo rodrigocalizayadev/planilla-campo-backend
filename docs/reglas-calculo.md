@@ -228,12 +228,19 @@ importeNeto  = importeBruto − comision − flete − otrosGastos
   al alta.
 - En **consignación**, la venta nace `ENTREGADA` con `precioUnitario`, `comision`
   e `importeNeto` en `null`. El neto se calcula recién al registrar la liquidación.
+- La consignación se puede liquidar **por tramos**: cada `LiquidacionVenta` calcula su propio
+  neto con la fórmula de arriba sobre **su** cantidad y **su** precio (`cantidad` del tramo,
+  no de la venta). El `importeNeto` de la venta es la suma de los netos congelados de sus
+  tramos (se suman `importeUsd` e `importeArs`, nunca se reconvierte con otra cotización).
 
 ### 6.2 Ingreso realizado
 
 ```
-ingresoRealizado(LC) = Σ Venta.importeNeto donde estado = LIQUIDADA
+ingresoRealizado(LC) = Σ Venta.importeNeto donde estado ∈ {PARCIAL, LIQUIDADA}
 ```
+
+En una consignación `PARCIAL`, `importeNeto` ya es el acumulado de los tramos liquidados:
+lo liquidado entra al realizado y lo que falta (`pendienteLiq`) sigue valuado como estimación.
 
 Es dinero efectivamente conocido. **Nunca incluye estimaciones.**
 
@@ -261,8 +268,12 @@ saldoArs(venta)   = importeNeto.importeArs − cobradoArs
 ```
 entregado(LC, calidad)  = Σ Venta.cantidad (cualquier estado)
 stock(LC, calidad)      = Σ Cosecha.cantidad − entregado(LC, calidad)
-pendienteLiq(LC)        = Σ Venta.cantidad donde estado = ENTREGADA
+pendienteLiq(LC)        = Σ (Venta.cantidad − Venta.cantidadLiquidada)
+                          donde estado ∈ {ENTREGADA, PARCIAL}
 ```
+
+`entregado` no cambia con la liquidación: lo entregado ya salió del stock aunque se liquide
+por partes.
 
 Ambos se valorizan a **precio de referencia** del cultivo y calidad, menos un
 porcentaje estimado de gastos de comercialización (parámetro configurable, por
@@ -455,3 +466,11 @@ campaña que va bien. Un sistema que mostrara solo el realizado sería engañoso
 15. Borrar un cobro → la venta se reabre y el saldo se restituye.
 16. Cobrar una venta → el margen realizado no cambia (se mide sobre lo devengado).
 17. Cobro o borrado de cobro con la campaña `CERRADA` → permitido; la venta sigue bloqueada.
+18. Consignación liquidada en 3 tramos a precios distintos → `importeNeto` = Σ (cantidad ×
+    precio) de cada tramo; `PARCIAL` hasta el último, `LIQUIDADA` al completar.
+19. Tramo mayor a la cantidad pendiente → rechazado (`LIQUIDACION_EXCEDE_PENDIENTE`).
+20. Consignación `PARCIAL` → el margen realizado toma lo liquidado y `pendienteLiq` valúa
+    solo los kg que faltan; `Σ` realizado + pendiente no cuenta dos veces una misma unidad.
+21. Borrar tramos → la venta vuelve a `PARCIAL` y, sin tramos, a `ENTREGADA`.
+22. Tramos simultáneos sobre la misma venta → se serializan y la suma nunca supera la cantidad.
+23. Tramos en monedas distintas → el acumulado suma `importeUsd` e `importeArs` congelados.

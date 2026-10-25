@@ -6,6 +6,7 @@ import com.planillacampo.planilla_campo.catalogo.entities.ModalidadVenta;
 import com.planillacampo.planilla_campo.catalogo.entities.UnidadProduccion;
 import com.planillacampo.planilla_campo.cosecha.entities.Calidad;
 import com.planillacampo.planilla_campo.shared.EntidadBase;
+import com.planillacampo.planilla_campo.shared.Moneda;
 import com.planillacampo.planilla_campo.shared.Monto;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -14,7 +15,10 @@ import lombok.Setter;
 import org.jspecify.annotations.Nullable;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.Comparator;
+import java.util.List;
 
 @Entity
 @Table(name = "venta",
@@ -118,6 +122,81 @@ public class Venta extends EntidadBase {
     @Column(name = "estado_cobro", length = 20)
     @Nullable
     private EstadoCobro estadoCobro;
+
+    /** Cantidad ya liquidada (Σ cantidad de sus tramos). Solo CONSIGNACION. */
+    @Column(name = "cantidad_liquidada", nullable = false, precision = 12, scale = 2)
+    private BigDecimal cantidadLiquidada = BigDecimal.ZERO;
+
+    /** Cantidad todavía sin liquidar. null en precio cerrado. */
+    public @Nullable BigDecimal getCantidadPendiente() {
+        if (modalidad != ModalidadVenta.CONSIGNACION) {
+            return null;
+        }
+        return cantidad.subtract(cantidadLiquidada);
+    }
+
+    /**
+     * Recalcula estado, importe neto y fechas a partir de TODOS los tramos de la consignación.
+     * importeNeto es el acumulado de los tramos; precio y gastos de la venta solo se llenan cuando
+     * un único tramo la liquida completa (el precio vive en cada tramo, no hay uno solo).
+     */
+    public void recalcularDesdeTramos(List<LiquidacionVenta> tramos) {
+        cantidadLiquidada = tramos.stream().map(LiquidacionVenta::getCantidad)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        precioUnitario = null;
+        comision = null;
+        flete = null;
+        otrosGastos = null;
+
+        if (tramos.isEmpty()) {
+            importeNeto = null;
+            fechaLiquidacion = null;
+            estado = EstadoVenta.ENTREGADA;
+            return;
+        }
+
+        importeNeto = acumular(tramos.stream().map(LiquidacionVenta::getImporteNeto).toList());
+        boolean completa = cantidadLiquidada.compareTo(cantidad) >= 0;
+        estado = completa ? EstadoVenta.LIQUIDADA : EstadoVenta.PARCIAL;
+        fechaLiquidacion = completa
+                ? tramos.stream().map(LiquidacionVenta::getFecha).max(Comparator.naturalOrder()).orElseThrow()
+                : null;
+        if (completa && tramos.size() == 1) {
+            LiquidacionVenta unico = tramos.getFirst();
+            precioUnitario = unico.getPrecioUnitario();
+            comision = unico.getComision();
+            flete = unico.getFlete();
+            otrosGastos = unico.getOtrosGastos();
+        }
+    }
+
+    /**
+     * Suma de importes netos ya congelados (ADR 0001: se suman los valores congelados, nunca se
+     * reconvierte). Cada componente se redondea a 2 decimales como se persiste, así la venta
+     * coincide exactamente con la suma de sus tramos. Si las monedas difieren, el acumulado
+     * queda en ARS y su tipo de cambio es el implícito (ARS / USD).
+     */
+    private static Monto acumular(List<Monto> montos) {
+        Moneda moneda = montos.getFirst().moneda();
+        boolean mismaMoneda = montos.stream().allMatch(m -> m.moneda() == moneda);
+        boolean mismoTipoCambio = montos.stream()
+                .allMatch(m -> m.tipoCambio().compareTo(montos.getFirst().tipoCambio()) == 0);
+
+        BigDecimal usd = montos.stream().map(Monto::importeUsdRedondeado)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal ars = montos.stream().map(Monto::importeArsRedondeado)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal importe = mismaMoneda
+                ? montos.stream().map(Monto::importeRedondeado).reduce(BigDecimal.ZERO, BigDecimal::add)
+                : ars;
+        BigDecimal tipoCambio;
+        if (mismaMoneda && mismoTipoCambio) {
+            tipoCambio = montos.getFirst().tipoCambio();
+        } else {
+            tipoCambio = usd.signum() > 0 ? ars.divide(usd, 4, RoundingMode.HALF_UP) : BigDecimal.ONE;
+        }
+        return new Monto(importe, mismaMoneda ? moneda : Moneda.ARS, tipoCambio, usd, ars);
+    }
 
     /** Saldo pendiente de cobro en ARS. null en consignación o si aún no hay importe neto. */
     public @Nullable BigDecimal getSaldoArs() {

@@ -31,5 +31,9 @@ public record VentaResponse(
         @Nullable EstadoCobro estadoCobro,
         BigDecimal cobradoArs,
         /** importeNeto.importeArs − cobradoArs. null en consignación. */
-        @Nullable BigDecimal saldoArs
+        @Nullable BigDecimal saldoArs,
+        /** Σ cantidad de los tramos de liquidación. Solo consignación. */
+        BigDecimal cantidadLiquidada,
+        /** cantidad − cantidadLiquidada. null en precio cerrado. */
+        @Nullable BigDecimal cantidadPendiente
 ) {}
