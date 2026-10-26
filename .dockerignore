@@ -1,0 +1,6 @@
+*
+!mvnw
+!pom.xml
+!.mvn/
+!src/
+src/main/resources/application-dev.yaml

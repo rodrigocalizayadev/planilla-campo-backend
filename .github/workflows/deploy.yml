@@ -1,0 +1,94 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Un deploy a la vez; uno nuevo espera a que termine el anterior en vez de cortarlo.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # GHCR exige el nombre en minúsculas; debe coincidir con deploy/docker-compose.prod.yml.
+  IMAGE: ghcr.io/rodrigo906/planilla-campo-backend
+  DEPLOY_DIR: planilla-campo
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  image:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: image
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configurar SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Copiar archivos de deploy
+        env:
+          TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+        run: |
+          ssh "$TARGET" "mkdir -p $DEPLOY_DIR"
+          scp deploy/docker-compose.prod.yml deploy/deploy.sh "$TARGET:$DEPLOY_DIR/"
+
+      # El GITHUB_TOKEN viaja por stdin y solo vive durante este job: el servidor
+      # hace login, baja la imagen y hace logout sin guardar credenciales.
+      - name: Desplegar
+        env:
+          TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          TAG: ${{ github.sha }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | ssh "$TARGET" "
+            docker login ghcr.io -u $ACTOR --password-stdin > /dev/null &&
+            sh $DEPLOY_DIR/deploy.sh $TAG
+            status=\$?
+            docker logout ghcr.io > /dev/null
+            exit \$status
+          "

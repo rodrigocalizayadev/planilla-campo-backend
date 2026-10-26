@@ -37,3 +37,7 @@ application-dev.yaml
 
 ### Registro de skills generado por gentle-ai ###
 .atl/
+
+### Secretos del servidor de produccion ###
+deploy/.env
+deploy/image.env
