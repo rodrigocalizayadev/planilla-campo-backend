@@ -1,0 +1,127 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Un deploy a la vez; uno nuevo espera a que termine el anterior en vez de cortarlo.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # GHCR exige el nombre en minúsculas; debe coincidir con deploy/docker-compose.prod.yml.
+  IMAGE: ghcr.io/rodrigo906/planilla-campo-backend
+  DEPLOY_DIR: planilla-campo
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  image:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Leer versión del pom
+        id: version
+        run: echo "version=$(./mvnw -B -q help:evaluate -Dexpression=project.version -DforceStdout)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Una versión de release publicada es inmutable; solo -SNAPSHOT puede republicarse.
+      - name: Verificar que la versión no esté publicada
+        if: ${{ !endsWith(steps.version.outputs.version, '-SNAPSHOT') }}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if docker buildx imagetools inspect "$IMAGE:$VERSION" > /dev/null 2>&1; then
+            echo "::error::La versión $VERSION ya está publicada. Subí <version> en pom.xml."
+            exit 1
+          fi
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # Sin attestations: cada build es una sola versión en GHCR, y la limpieza
+          # por cantidad de versiones cuenta imágenes reales.
+          provenance: false
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: image
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configurar SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Copiar archivos de deploy
+        env:
+          TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+        run: |
+          ssh "$TARGET" "mkdir -p $DEPLOY_DIR"
+          scp deploy/docker-compose.prod.yml deploy/deploy.sh "$TARGET:$DEPLOY_DIR/"
+
+      # El GITHUB_TOKEN viaja por stdin y solo vive durante este job: el servidor
+      # hace login, baja la imagen y hace logout sin guardar credenciales.
+      - name: Desplegar
+        env:
+          TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          TAG: ${{ github.sha }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | ssh "$TARGET" "
+            docker login ghcr.io -u $ACTOR --password-stdin > /dev/null &&
+            sh $DEPLOY_DIR/deploy.sh $TAG
+            status=\$?
+            docker logout ghcr.io > /dev/null
+            exit \$status
+          "
+
+      # Solo tras un deploy sano: conserva la imagen actual y la anterior (para rollback).
+      - name: Limpiar versiones viejas en GHCR
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: planilla-campo-backend
+          package-type: container
+          min-versions-to-keep: 2

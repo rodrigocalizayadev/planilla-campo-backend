@@ -1,0 +1,42 @@
+# Stack de producción: API + MySQL. Se usa solo a través de deploy.sh.
+# Los secretos viven en .env en el servidor (ver .env.example), nunca en el repo.
+name: planilla-campo
+
+services:
+  db:
+    # Misma versión que docker-compose.yml y que IntegrationTestBase (Testcontainers).
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: planilla_campo
+      MYSQL_USER: ${DB_USER:?falta DB_USER en .env}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?falta DB_PASSWORD en .env}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?falta DB_ROOT_PASSWORD en .env}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+    # Sin "ports": la base solo es accesible desde la red interna del stack.
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  api:
+    image: ghcr.io/rodrigo906/planilla-campo-backend:${IMAGE_TAG:?falta IMAGE_TAG (lo escribe deploy.sh)}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/planilla_campo
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      APP_JWT_SECRET: ${JWT_SECRET:?falta JWT_SECRET en .env}
+    ports:
+      # Por defecto solo escucha en localhost: el acceso público va por un reverse proxy con HTTPS.
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8080}:8080"
+
+volumes:
+  mysql_data:

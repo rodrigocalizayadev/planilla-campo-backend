@@ -163,6 +163,24 @@ como test de integración, con `margenRealizado = 3.502.500` y
 
 ---
 
+## Slice 6b — Cobros y liquidaciones parciales
+
+El mecanismo de pago lo define `Venta.modalidad`, no el cultivo.
+
+- **Precio cerrado (cebolla)**: `Cobro` sobre un importe neto fijo; `estadoCobro`
+  `PENDIENTE`/`PARCIAL`/`COBRADA` y `saldoArs` (migración `V15`). Endpoints
+  `POST|GET /api/ventas/{id}/cobros` y `DELETE /api/cobros/{id}`.
+- **Consignación (maíz)**: liquidación por tramos (kg × precio del día) con estado
+  `PARCIAL` (migración `V16`). Endpoints `POST|GET /api/ventas/{id}/liquidaciones` y
+  `DELETE /api/liquidaciones/{id}`; `PATCH /api/ventas/{id}/liquidacion` se mantiene
+  (liquida de una vez lo que falte).
+- Saldo por comprador: `GET /api/compradores/{id}/saldo`.
+- Los cobros y tramos se registran también con la campaña `CERRADA`.
+
+**Aceptación**: el ejemplo canónico y los casos borde existentes pasan sin modificarse.
+
+---
+
 ## Slice 7 — Reportes
 
 - `GET /api/campanias/{id}/resumen` → costos, ingresos y márgenes por lote-campaña

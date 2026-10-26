@@ -49,6 +49,8 @@ public abstract class IntegrationTestBase {
     @BeforeEach
     void limpiarBase() {
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 0");
+        jdbc.execute("TRUNCATE TABLE cobro");
+        jdbc.execute("TRUNCATE TABLE liquidacion_venta");
         jdbc.execute("TRUNCATE TABLE venta");
         jdbc.execute("TRUNCATE TABLE cosecha");
         jdbc.execute("TRUNCATE TABLE costo_indirecto_parte");

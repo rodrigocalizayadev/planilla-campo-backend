@@ -247,6 +247,24 @@ public class ReportesService {
         Map<Long, List<LoteCampania>> porCampania = lotesConCultivo.stream()
                 .collect(Collectors.groupingBy(lc -> lc.getCampania().getId()));
 
+        // Precarga agregaciones por campaña para todos los campaniaIds — evita N+1.
+        // Filtramos luego a los lotes que matchean el cultivo (porCampania).
+        Map<Long, BigDecimal> insumosUsdTotal   = new HashMap<>();
+        Map<Long, BigDecimal> tareasUsdTotal    = new HashMap<>();
+        Map<Long, BigDecimal> directosUsdTotal  = new HashMap<>();
+        Map<Long, BigDecimal> partesUsdTotal    = new HashMap<>();
+        Map<Long, BigDecimal> ingresoUsdTotal   = new HashMap<>();
+        Map<Long, BigDecimal> kgTotalPorLc      = new HashMap<>();
+
+        for (Long cid : campaniaIds) {
+            insumosUsdTotal.putAll(toMap(loteCampaniaRepository.sumCostoInsumosUsdByCampania(cid)));
+            tareasUsdTotal.putAll(toMap(loteCampaniaRepository.sumCostoTareasUsdByCampania(cid)));
+            directosUsdTotal.putAll(toMap(costoIndirectoRepository.sumDirectosUsdByCampania(cid)));
+            partesUsdTotal.putAll(toMap(costoIndirectoRepository.sumPartesUsdByCampania(cid)));
+            ingresoUsdTotal.putAll(toMap(ventaRepository.sumImporteNetoUsdLiquidadasByCampania(cid)));
+            kgTotalPorLc.putAll(toMap(cosechaRepository.sumKgEquivalenteTotalByCampania(cid)));
+        }
+
         List<ComparativaResponse.FilaCampaniaResponse> filas = new ArrayList<>();
         for (Long cid : campaniaIds) {
             List<LoteCampania> lotesDeEsta = porCampania.getOrDefault(cid, List.of());
@@ -259,15 +277,15 @@ public class ReportesService {
 
             for (LoteCampania lc : lotesDeEsta) {
                 Long lcId = lc.getId();
-                BigDecimal costoInsumos    = loteCampaniaRepository.sumCostoInsumosUsd(lcId);
-                BigDecimal costoTareas     = loteCampaniaRepository.sumCostoTareasUsd(lcId);
-                BigDecimal costoIndirectos = costoIndirectoRepository.sumDirectosUsd(lcId)
-                        .add(costoIndirectoRepository.sumPartesUsd(lcId));
+                BigDecimal costoInsumos    = insumosUsdTotal.getOrDefault(lcId, BigDecimal.ZERO);
+                BigDecimal costoTareas     = tareasUsdTotal.getOrDefault(lcId, BigDecimal.ZERO);
+                BigDecimal costoIndirectos = directosUsdTotal.getOrDefault(lcId, BigDecimal.ZERO)
+                        .add(partesUsdTotal.getOrDefault(lcId, BigDecimal.ZERO));
 
                 superficieTotal    = superficieTotal.add(lc.getSuperficieSembradaHa());
                 costoTotalUsd      = costoTotalUsd.add(costoInsumos).add(costoTareas).add(costoIndirectos);
-                ingresoRealizadoUsd = ingresoRealizadoUsd.add(ventaRepository.sumImporteNetoUsdLiquidadas(lcId));
-                kgEquivalenteTotal = kgEquivalenteTotal.add(cosechaRepository.sumKgEquivalenteTotal(lcId));
+                ingresoRealizadoUsd = ingresoRealizadoUsd.add(ingresoUsdTotal.getOrDefault(lcId, BigDecimal.ZERO));
+                kgEquivalenteTotal = kgEquivalenteTotal.add(kgTotalPorLc.getOrDefault(lcId, BigDecimal.ZERO));
             }
 
             BigDecimal costoPorHaUsd = superficieTotal.compareTo(BigDecimal.ZERO) > 0
@@ -382,9 +400,11 @@ public class ReportesService {
 
         BigDecimal rendimientoPorHa = null;
         BigDecimal tasaDescarte     = null;
-        if (kgTotal.compareTo(BigDecimal.ZERO) > 0 && superficie.compareTo(BigDecimal.ZERO) > 0) {
-            rendimientoPorHa = kgTotal.divide(superficie, 4, RoundingMode.HALF_UP);
+        if (kgTotal.compareTo(BigDecimal.ZERO) > 0) {
             tasaDescarte = kgDescarte.divide(kgTotal, 4, RoundingMode.HALF_UP);
+            if (superficie.compareTo(BigDecimal.ZERO) > 0) {
+                rendimientoPorHa = kgTotal.divide(superficie, 4, RoundingMode.HALF_UP);
+            }
         }
 
         return new ResumenLoteCampaniaResponse(

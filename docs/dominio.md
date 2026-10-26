@@ -196,11 +196,24 @@ con la misma entidad `Venta`:
 Se acuerda precio antes o al momento de entregar. La venta nace con
 `estado = LIQUIDADA` y el precio cargado. El margen se conoce de inmediato.
 
+El comprador puede **pagar en cuotas** (ej. cebolla: una venta se cierra en el día a un
+valor fijo y la deuda va bajando). Cada pago es un `Cobro` sobre la venta; la venta
+nace `PENDIENTE` de cobro y pasa a `COBRADA` sola cuando el saldo llega a cero. Los
+cobros no alteran el margen (se mide sobre lo devengado) y se cargan también con la
+campaña `CERRADA`, porque los pagos llegan después del cierre.
+
 ### 10.2 Consignación
 Se entrega la mercadería **sin precio**. El consignatario la vende y liquida
 semanas después, descontando comisión, flete y gastos. La venta nace con
 `estado = ENTREGADA` y `precioUnitario` en `null`, y se completa cuando llega la
 liquidación.
+
+La liquidación puede llegar **por tramos**. Ej. maíz: se entrega todo a un mismo
+comprador y este paga de a poco al precio del día ("te pago X kg al precio de hoy").
+Cada pago es una `LiquidacionVenta` con su cantidad, su precio y su fecha; la venta
+queda `PARCIAL` mientras haya kilos sin liquidar y `LIQUIDADA` cuando se liquida la
+cantidad total. Los kg pendientes son la deuda del comprador. Los tramos se cargan
+también con la campaña `CERRADA`.
 
 **Esta es la regla de negocio más fácil de romper.** Si el sistema calcula el
 margen ignorando las entregas sin liquidar, va a mostrar campañas falsamente
@@ -356,6 +369,7 @@ Esta tabla es la fuente única de verdad; cada pantalla debe usarla.
 | Enum | Etiqueta |
 |---|---|
 | `ENTREGADA` | Entregada |
+| `PARCIAL` | Parcial |
 | `LIQUIDADA` | Liquidada |
 
 ### `EstadoCampania`
@@ -376,11 +390,14 @@ Reglas que el código debe garantizar:
 2. No existe unique constraint sobre `(campania, lote)`. Sí sobre
    `(campania, lote, cultivo, ciclo)`.
 3. Toda `AplicacionInsumo` y toda `Tarea` pertenece a exactamente un `LoteCampania`.
-4. `Venta.precioUnitario` es nullable **solo** si `estado = ENTREGADA`. Si
-   `estado = LIQUIDADA`, precio y `fechaLiquidacion` son obligatorios.
+4. `Venta.precioUnitario` es obligatorio en `PRECIO_CERRADO`. En consignación el precio
+   vive en cada `LiquidacionVenta`; la venta solo lo lleva si un único tramo la liquidó
+   completa. Si `estado = LIQUIDADA`, `fechaLiquidacion` e `importeNeto` son obligatorios.
 5. La cantidad vendida de una calidad no puede superar la cosechada de esa
    calidad en el mismo lote-campaña.
-6. Una `Campania` en estado `CERRADA` no admite nuevos movimientos.
+6. Una `Campania` en estado `CERRADA` no admite nuevos movimientos de costo ni ventas.
+   Excepción: los `Cobro` (y, en consignación, las liquidaciones) se registran y borran
+   igual, porque son pagos tardíos.
 7. Toda consulta filtra por `establecimiento`. Sin excepción.
 8. Los costos se congelan en el movimiento: modificar el catálogo no altera
    ningún costo histórico.

@@ -4,6 +4,7 @@ import com.planillacampo.planilla_campo.catalogo.entities.ModalidadVenta;
 import com.planillacampo.planilla_campo.catalogo.entities.UnidadProduccion;
 import com.planillacampo.planilla_campo.cosecha.entities.Calidad;
 import com.planillacampo.planilla_campo.shared.Monto;
+import com.planillacampo.planilla_campo.venta.entities.EstadoCobro;
 import com.planillacampo.planilla_campo.venta.entities.EstadoVenta;
 import org.jspecify.annotations.Nullable;
 import java.math.BigDecimal;
@@ -25,5 +26,14 @@ public record VentaResponse(
         @Nullable Monto comision,
         @Nullable Monto flete,
         @Nullable Monto otrosGastos,
-        @Nullable Monto importeNeto
+        @Nullable Monto importeNeto,
+        /** Solo PRECIO_CERRADO; null en consignación. */
+        @Nullable EstadoCobro estadoCobro,
+        BigDecimal cobradoArs,
+        /** importeNeto.importeArs − cobradoArs. null en consignación. */
+        @Nullable BigDecimal saldoArs,
+        /** Σ cantidad de los tramos de liquidación. Solo consignación. */
+        BigDecimal cantidadLiquidada,
+        /** cantidad − cantidadLiquidada. null en precio cerrado. */
+        @Nullable BigDecimal cantidadPendiente
 ) {}
