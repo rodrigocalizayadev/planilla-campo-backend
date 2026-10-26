@@ -26,6 +26,15 @@ health_ok() {
   return 1
 }
 
+# Conserva solo la imagen desplegada y la anterior (para rollback).
+remove_old_images() {
+  image="ghcr.io/rodrigo906/planilla-campo-backend"  # igual que en docker-compose.prod.yml
+  docker image ls "$image" --format '{{.Tag}}' \
+    | grep -vxF -e "$TAG" -e "${PREVIOUS_TAG:-$TAG}" -e '<none>' \
+    | while read -r old; do docker rmi "$image:$old" > /dev/null || true; done
+  docker image prune -f > /dev/null
+}
+
 PREVIOUS_TAG="$(sed -n 's/^IMAGE_TAG=//p' image.env 2>/dev/null || true)"
 
 printf 'IMAGE_TAG=%s\n' "$TAG" > image.env
@@ -34,7 +43,7 @@ compose up -d --remove-orphans
 
 if health_ok; then
   echo "Deploy OK: $TAG"
-  docker image prune -f > /dev/null
+  remove_old_images
   exit 0
 fi
 
