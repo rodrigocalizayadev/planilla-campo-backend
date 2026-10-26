@@ -12,6 +12,7 @@ import com.planillacampo.planilla_campo.catalogo.entities.UnidadProduccion;
 import com.planillacampo.planilla_campo.cosecha.entities.Calidad;
 import com.planillacampo.planilla_campo.costos.entities.CriterioProrrateo;
 import com.planillacampo.planilla_campo.shared.Moneda;
+import com.planillacampo.planilla_campo.venta.entities.EstadoCobro;
 import com.planillacampo.planilla_campo.venta.entities.EstadoVenta;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -55,6 +56,7 @@ public class MetadataController {
         map.put("unidadProduccion",   listar(UnidadProduccion.values()));
         map.put("modalidadVenta",     listar(ModalidadVenta.values()));
         map.put("estadoVenta",        listar(EstadoVenta.values()));
+        map.put("estadoCobro",        listar(EstadoCobro.values()));
         map.put("estadoCampania",     listar(EstadoCampania.values()));
         map.put("criterioProrrateo",  listar(CriterioProrrateo.values()));
         map.put("moneda",             listar(Moneda.values()));

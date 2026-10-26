@@ -39,9 +39,9 @@ public record ResumenLoteCampaniaResponse(
         /** costoTotal / superficieSembradaHa en USD. */
         BigDecimal costoPorHaUsd,
 
-        /** Σ importeNeto.importeArs de ventas LIQUIDADAS. */
+        /** Σ importeNeto.importeArs de ventas PARCIAL y LIQUIDADAS (tramos ya liquidados). */
         BigDecimal ingresoRealizadoArs,
-        /** Σ importeNeto.importeUsd de ventas LIQUIDADAS. */
+        /** Σ importeNeto.importeUsd de ventas PARCIAL y LIQUIDADAS (tramos ya liquidados). */
         BigDecimal ingresoRealizadoUsd,
 
         /** ingresoRealizado − costoTotal en ARS. */

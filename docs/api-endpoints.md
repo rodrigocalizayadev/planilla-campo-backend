@@ -1253,8 +1253,9 @@ Cada elemento de `partes`: `{ "loteCampaniaId": Long (@NotNull), "importe": Mont
 
 ### PUT /api/ventas/{id}
 
-Edita una venta **ENTREGADA** (consignación pendiente de liquidar). No se puede
-editar una venta LIQUIDADA — para eso existe el endpoint de liquidación.
+Edita una venta **ENTREGADA** (consignación pendiente de liquidar y sin tramos). No se
+puede editar una venta LIQUIDADA ni una PARCIAL (con tramos de liquidación): para eso
+existen los endpoints de liquidación.
 
 El request es idéntico al de `POST /api/lote-campanias/{id}/ventas`. La
 validación de stock excluye la cantidad actual de la propia venta antes de
@@ -1271,6 +1272,7 @@ comparar: `disponible = cosechado − ya entregado + cantidad_actual`.
 | `VENTA_NO_ENCONTRADA` | La venta no existe o no pertenece al establecimiento |
 | `CAMPANIA_CERRADA` | La campaña está cerrada |
 | `VENTA_YA_LIQUIDADA` | La venta tiene estado LIQUIDADA |
+| `VENTA_CON_PAGOS` | La venta está PARCIAL (tiene tramos de liquidación registrados) |
 | `CALIDAD_DESCARTE_NO_VENDIBLE` | `calidad = DESCARTE` |
 | `STOCK_INSUFICIENTE` | La nueva cantidad supera el stock disponible |
 | `COMPRADOR_NO_ENCONTRADO` | El comprador no existe o no pertenece al establecimiento |
@@ -1295,6 +1297,7 @@ Elimina una venta. Solo permitido si la campaña no está cerrada.
 |---|---|
 | `VENTA_NO_ENCONTRADA` | La venta no existe o no pertenece al establecimiento |
 | `CAMPANIA_CERRADA` | La campaña está cerrada |
+| `VENTA_CON_PAGOS` | La venta tiene cobros o liquidaciones registrados (borrarlos primero) |
 
 (Verificado: `VentaService.eliminar`.)
 
@@ -1302,7 +1305,10 @@ Elimina una venta. Solo permitido si la campaña no está cerrada.
 
 ### PATCH /api/ventas/{id}/liquidacion
 
-Liquida una venta en consignación.
+Liquida de una vez una venta en consignación: crea **un único tramo** por toda la cantidad
+que falte liquidar (`cantidadPendiente`) y deja la venta `LIQUIDADA`. Si ya tenía tramos
+(`PARCIAL`), liquida solo el resto. Para liquidar por partes usar
+`POST /api/ventas/{id}/liquidaciones`.
 
 **Auth:** requiere JWT.  
 **HTTP:** 200 OK.
@@ -1338,6 +1344,143 @@ Liquida una venta en consignación.
 | `VENTA_YA_LIQUIDADA` | La venta ya tiene estado `LIQUIDADA` |
 
 **Response:** `VentaResponse` actualizado con todos los campos de liquidación.
+
+---
+
+### Cobros (ventas a precio cerrado)
+
+El mecanismo de pago lo define `Venta.modalidad`: los cobros aplican a `PRECIO_CERRADO`
+(cuotas sobre un importe neto fijo). Los cobros **no alteran el margen** (se calcula
+sobre lo devengado) y se pueden cargar y borrar aunque la campaña esté `CERRADA`.
+Solo se aceptan en **ARS**.
+
+#### POST /api/ventas/{id}/cobros
+
+**Auth:** requiere JWT.  
+**HTTP:** 201 Created. Devuelve el `VentaResponse` actualizado (`estadoCobro`,
+`cobradoArs`, `saldoArs`).
+
+```json
+{
+  "fecha": "2026-01-15",
+  "monto": { "importe": 200000.0, "moneda": "ARS", "tipoCambio": 1 },
+  "comentarios": "Primera cuota"
+}
+```
+
+| Campo | Tipo | Validación |
+|---|---|---|
+| `fecha` | LocalDate | `@NotNull` |
+| `monto` | Monto | `@NotNull`, moneda `ARS`, importe `> 0` |
+| `comentarios` | String | opcional |
+
+**Errores:**
+
+| code | Condición |
+|---|---|
+| `VENTA_NO_ENCONTRADA` | La venta no existe o no pertenece al establecimiento |
+| `MODALIDAD_INVALIDA` | La venta no es `PRECIO_CERRADO` |
+| `MONEDA_COBRO_INVALIDA` | El monto no está en ARS |
+| `COBRO_MONTO_INVALIDO` | El importe no es positivo |
+| `COBRO_EXCEDE_SALDO` | El cobro supera el saldo pendiente |
+
+La venta pasa a `PARCIAL` mientras quede saldo y a `COBRADA` cuando el saldo llega a cero.
+
+#### GET /api/ventas/{id}/cobros
+
+Lista paginada (`Pageable`) de los cobros de la venta. **HTTP:** 200 OK.
+
+#### DELETE /api/cobros/{id}
+
+Borra un cobro; la venta se reabre (`PENDIENTE` o `PARCIAL`) si dejó de estar cobrada.
+**HTTP:** 200 OK con el `VentaResponse` actualizado. Error: `COBRO_NO_ENCONTRADO`.
+
+---
+
+### Liquidaciones por tramos (consignación)
+
+Cuando el comprador paga de a poco al precio del día (maíz: "te pago X kg al precio de
+hoy"), cada pago es un tramo con su cantidad, su precio y su fecha. Aplica a
+`CONSIGNACION`. Los tramos se pueden cargar y borrar aunque la campaña esté `CERRADA`.
+
+#### POST /api/ventas/{id}/liquidaciones
+
+**Auth:** requiere JWT.  
+**HTTP:** 201 Created. Devuelve el `VentaResponse` actualizado (`estado`, `importeNeto`,
+`cantidadLiquidada`, `cantidadPendiente`).
+
+```json
+{
+  "fecha": "2026-02-10",
+  "cantidad": 30,
+  "precioUnitario": { "importe": 5500.0, "moneda": "ARS", "tipoCambio": 1 },
+  "comision": null,
+  "flete": null,
+  "otrosGastos": null
+}
+```
+
+| Campo | Tipo | Validación |
+|---|---|---|
+| `fecha` | LocalDate | `@NotNull` |
+| `cantidad` | BigDecimal | `@NotNull`, `@Positive`; se redondea a 2 decimales |
+| `precioUnitario` | Monto | `@NotNull` |
+| `comision`, `flete`, `otrosGastos` | Monto | opcionales |
+
+**Errores:**
+
+| code | Condición |
+|---|---|
+| `VENTA_NO_ENCONTRADA` | La venta no existe o no pertenece al establecimiento |
+| `MODALIDAD_INVALIDA` | La venta no es `CONSIGNACION` |
+| `LIQUIDACION_CANTIDAD_INVALIDA` | La cantidad redondea a cero |
+| `LIQUIDACION_EXCEDE_PENDIENTE` | La cantidad supera lo que falta liquidar |
+
+La venta pasa a `PARCIAL` mientras queden unidades sin liquidar y a `LIQUIDADA` cuando se
+liquida la cantidad total. `importeNeto` es el acumulado de los tramos; `precioUnitario`
+de la venta queda ausente cuando hay más de un tramo (el precio vive en cada tramo).
+
+#### GET /api/ventas/{id}/liquidaciones
+
+Lista paginada (`Pageable`) de los tramos. Cada ítem: `id`, `ventaId`, `fecha`, `cantidad`,
+`precioUnitario`, `comision`, `flete`, `otrosGastos`, `importeNeto`. **HTTP:** 200 OK.
+
+#### DELETE /api/liquidaciones/{id}
+
+Borra un tramo y recalcula la venta (`PARCIAL` o `ENTREGADA` si ya no quedan tramos).
+**HTTP:** 200 OK con el `VentaResponse` actualizado. Error: `LIQUIDACION_NO_ENCONTRADA`.
+
+---
+
+### GET /api/compradores/{id}/saldo
+
+Lo que un comprador le debe al productor, en **dos conceptos que no se mezclan**: un saldo
+exacto en plata (ventas a precio cerrado) y unidades sin liquidar (consignación). Las
+unidades no se valúan: todavía no tienen precio, y sumarlas a una estimación en un único
+número haría pasar una estimación por dato exacto.
+
+**Auth:** requiere JWT.  
+**HTTP:** 200 OK.
+
+```json
+{
+  "compradorId": 2,
+  "compradorNombre": "Acopiador Central",
+  "saldoCobrarArs": 700000.00,
+  "pendientesLiquidar": [
+    { "cultivoId": 1, "cultivoNombre": "Cebolla", "calidad": "PRIMERA", "unidad": "BOLSA", "cantidadPendiente": 50.00 },
+    { "cultivoId": 2, "cultivoNombre": "Maiz",    "calidad": "PRIMERA", "unidad": "BOLSA", "cantidadPendiente": 70.00 }
+  ]
+}
+```
+
+- `saldoCobrarArs` = Σ (`importeNeto.importeArs` − `cobradoArs`) de las ventas `PRECIO_CERRADO`
+  con `estadoCobro` distinto de `COBRADA`, de todas las campañas (incluidas las cerradas).
+- `pendientesLiquidar` = Σ (`cantidad` − `cantidadLiquidada`) de las consignaciones
+  `ENTREGADA` o `PARCIAL`, agrupado por cultivo, calidad y unidad, ordenado por cultivo.
+  La lista está acotada por la cantidad de cultivos y calidades, por eso no se pagina.
+
+**Errores:** `COMPRADOR_NO_ENCONTRADO` si no existe o no pertenece al establecimiento.
 
 ---
 
@@ -1784,6 +1927,28 @@ consignación ya liquidada (verificado en `VentaService.registrar` y `VentaMappe
 - En PRECIO_CERRADO al crear: `fechaLiquidacion = fechaEntrega`, `estado = LIQUIDADA`.
 - `flete` y `otrosGastos` pueden estar ausentes incluso en liquidadas si no se
   enviaron al crear o liquidar.
+
+**Cobro** (siempre presente `cobradoArs`; `estadoCobro` y `saldoArs` solo en
+`PRECIO_CERRADO`, ausentes en consignación):
+
+```json
+{ "estadoCobro": "PARCIAL", "cobradoArs": 200000.00, "saldoArs": 649500.00 }
+```
+
+- `estadoCobro`: `PENDIENTE` (sin cobros), `PARCIAL` (queda saldo), `COBRADA` (saldo 0).
+  Una venta nueva a precio cerrado nace `PENDIENTE`.
+- `saldoArs = importeNeto.importeArs − cobradoArs`.
+
+**Liquidación por tramos** (`cantidadLiquidada` siempre presente; `cantidadPendiente` solo
+en consignación, ausente en precio cerrado):
+
+```json
+{ "estado": "PARCIAL", "cantidadLiquidada": 40.00, "cantidadPendiente": 60.00 }
+```
+
+- `estado`: `ENTREGADA` (sin tramos), `PARCIAL` (liquidada en parte), `LIQUIDADA` (cantidad total).
+- `importeNeto` es el acumulado de los tramos; `precioUnitario` solo aparece si un único
+  tramo liquidó la venta completa.
 
 (Verificado: `VentaResponse.java`, `VentaService.registrar`, `VentaService.liquidar`.)
 
