@@ -18,8 +18,18 @@ Lo construí para el negocio hortícola de mi familia. Las campañas se costeaba
 
 ```mermaid
 flowchart LR
-    FE[Frontend Angular] -- "REST + JWT" --> API[API Spring Boot]
-    API -- "JPA / Flyway" --> DB[(MySQL 8.4)]
+    U([Productor]) --> FE["Frontend<br/>Angular"]
+    FE -- "HTTP / JSON<br/>Bearer JWT" --> SEC
+
+    subgraph API["API REST · Spring Boot 4.1"]
+        direction LR
+        SEC["Spring Security<br/>valida el JWT"] --> CTRL["Controllers<br/>DTOs como record"]
+        CTRL --> SVC["Services<br/>costos y márgenes"]
+        SVC --> REPO["Repositories<br/>filtran por establecimiento"]
+    end
+
+    REPO -- "JPA / Hibernate" --> DB[("MySQL 8.4")]
+    FLY["Flyway"] -. "migra el esquema<br/>al arrancar" .-> DB
 ```
 
 ## Cómo se construyó
