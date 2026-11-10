@@ -16,6 +16,7 @@ suposiciones de granos son incorrectas acá y están listadas explícitamente en
 | `docs/modelo-datos.md` | Entidades, tipos, constraints, índices |
 | `docs/plan.md` | Slices verticales de desarrollo |
 | `docs/adr/` | Decisiones de arquitectura |
+| `docs/despliegue.md` | CI/CD, servidor de producción, rollback |
 
 ## Stack
 
