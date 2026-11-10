@@ -2,6 +2,40 @@
 
 API REST para costeo de campañas hortícolas. Permite a un productor registrar costos, cosechas y ventas por lote-campaña, y calcular el margen bruto de cada ciclo productivo.
 
+> Frontend (Angular): [planilla-campo-frontend](https://github.com/rodrigocalizayadev/planilla-campo-frontend)
+
+## Por qué existe
+
+Lo construí para el negocio hortícola de mi familia. Las campañas se costeaban en planillas, mezclando pesos y dólares y con inflación alta, así que al cerrar un ciclo no había forma confiable de saber cuánto había dejado cada lote. Esta app responde esa pregunta: **¿cuánto costó y cuánto ganó cada cultivo en cada lote, en cada campaña?**
+
+## Destacados
+
+- **Dinero modelado como dominio, no como número.** `Monto` es un value object que guarda importe, moneda y tipo de cambio del día, con equivalentes en ARS y USD. Todo en `BigDecimal`. Ver [ADR 0001](docs/adr/0001-value-object-monto.md).
+- **Historia inmutable.** Los precios se congelan en cada movimiento, así que actualizar el catálogo no reescribe costos de campañas pasadas.
+- **Aislamiento por establecimiento desde el día uno.** Toda consulta filtra por el establecimiento del usuario autenticado, que se resuelve en el servidor y nunca lo envía el cliente. Queda preparado para multi-tenancy sin pagar hoy su complejidad. Ver [ADR 0003](docs/adr/0003-multitenancy-diferida.md).
+- **Tests contra una base real.** Tests de integración con Testcontainers sobre MySQL 8.4, incluidas pruebas de migraciones Flyway con backfill de datos históricos.
+- **CI/CD.** Cada PR corre `./mvnw verify`. Cada merge a `master` publica la imagen en GHCR y la despliega por SHA. Ver [`docs/despliegue.md`](docs/despliegue.md).
+
+```mermaid
+flowchart LR
+    FE[Frontend Angular] -- "REST + JWT" --> API[API Spring Boot]
+    API -- "JPA / Flyway" --> DB[(MySQL 8.4)]
+```
+
+## Cómo se construyó
+
+Lo desarrollé con Claude Code como asistente de programación. El modelo de dominio, las reglas de cálculo y las decisiones de negocio son mías, y salen de conocer el rubro. Cada punto ambiguo que discutí con el agente (cómo tratar los montos multimoneda, si unificar los tipos de movimiento, cuándo encarar la multi-tenancy) quedó registrado como un [ADR](docs/adr/). Así la decisión queda explícita, versionada y es la que guía cualquier cambio futuro. Las reglas que el agente debe respetar están en [`CLAUDE.md`](CLAUDE.md).
+
+## Estado
+
+**MVP funcional de punta a punta** (backend + frontend). Próximos pasos, en orden de prioridad:
+
+1. Presupuesto por campaña y desvío real vs. presupuestado.
+2. Maquinaria y herramientas con costo horario de uso.
+3. Registro sanitario: monitoreo de plagas y enfermedades vinculado a las pulverizaciones.
+4. Multi-tenant real: `Organizacion` sobre `Establecimiento` (ver [ADR 0003](docs/adr/0003-multitenancy-diferida.md)).
+5. Carga offline desde el celular, a pie de lote.
+
 ---
 
 ## Stack
@@ -83,83 +117,19 @@ com.planillacampo
 **Base URL:** `http://localhost:8080`  
 **Auth:** `Authorization: Bearer <token>` en todos los endpoints excepto login y registro.
 
-### Auth
-| Método | Ruta | Descripción |
-|---|---|---|
-| POST | `/api/auth/registro` | Registra usuario y crea su establecimiento. Devuelve JWT. |
-| POST | `/api/auth/login` | Autentica y devuelve JWT. |
-| GET | `/api/auth/me` | Datos del usuario autenticado. |
-
-### Catálogos (CRUD con baja lógica)
-| Recurso | Base |
+| Grupo | Qué cubre |
 |---|---|
-| Lotes | `/api/lotes` |
-| Cultivos | `/api/cultivos` |
-| Insumos | `/api/insumos` |
-| Compradores | `/api/compradores` |
+| Auth | Registro (crea el establecimiento), login con JWT y datos del usuario autenticado. |
+| Catálogos | Lotes, cultivos, insumos y compradores: CRUD paginado con baja lógica y reactivación. |
+| Campañas | Alta, edición, cambio de estado y cierre (solo lectura desde ahí). |
+| Lote-Campaña | Lotes de cada campaña, aplicaciones de insumos, tareas, feed de movimientos y desglose de costos. |
+| Costos indirectos | Canon de riego, alquileres, etc., prorrateados por hectárea o en forma manual. |
+| Cosechas | Cortes por calidad de cada lote-campaña. |
+| Ventas | Precio cerrado y consignación, cobros parciales, liquidación por tramos, saldo por comprador y margen. |
+| Reportes | Resumen de campaña, costos por rubro y comparativa de un cultivo entre campañas. |
+| Metadata | Enums con sus etiquetas en español. |
 
-Todos soportan `GET` (paginado), `POST`, `PUT /{id}`, `DELETE /{id}` (baja lógica) y `PATCH /{id}/reactivar`.
-
-### Campañas
-| Método | Ruta | Descripción |
-|---|---|---|
-| POST | `/api/campanias` | Alta de campaña. |
-| GET | `/api/campanias` | Listado paginado. |
-| GET | `/api/campanias/{id}` | Detalle. |
-| PUT | `/api/campanias/{id}` | Edición. |
-| PATCH | `/api/campanias/{id}/cerrar` | Cierra la campaña (solo lectura desde ahí). |
-| PATCH | `/api/campanias/{id}/estado` | Cambia estado (`PLANIFICADA`, `EN_CURSO`, `CERRADA`). |
-
-### Lote-Campaña y movimientos
-| Método | Ruta | Descripción |
-|---|---|---|
-| POST | `/api/campanias/{id}/lote-campanias` | Agrega un lote a la campaña. |
-| GET | `/api/campanias/{id}/lote-campanias` | Listado. |
-| POST | `/api/lote-campanias/{id}/aplicaciones` | Registra aplicación de insumo. |
-| GET | `/api/lote-campanias/{id}/aplicaciones` | Listado. |
-| DELETE | `/api/lote-campanias/{id}/aplicaciones/{aplicacionId}` | Elimina. |
-| POST | `/api/lote-campanias/{id}/tareas` | Registra tarea de mano de obra. |
-| GET | `/api/lote-campanias/{id}/tareas` | Listado. |
-| DELETE | `/api/lote-campanias/{id}/tareas/{tareaId}` | Elimina. |
-| GET | `/api/lote-campanias/{id}/movimientos` | Feed unificado (insumos + tareas) por fecha. |
-| GET | `/api/lote-campanias/{id}/costos` | Desglose de costos por rubro + indicadores. |
-
-### Costos indirectos (canon de riego, alquileres, etc.)
-| Método | Ruta | Descripción |
-|---|---|---|
-| POST | `/api/campanias/{id}/costos-indirectos` | Alta con prorrateo POR_HA o MANUAL. |
-| GET | `/api/campanias/{id}/costos-indirectos` | Listado. |
-| DELETE | `/api/campanias/{id}/costos-indirectos/{costoId}` | Elimina. |
-
-### Cosechas
-| Método | Ruta | Descripción |
-|---|---|---|
-| POST | `/api/lote-campanias/{id}/cosechas` | Registra un corte por calidad. |
-| GET | `/api/lote-campanias/{id}/cosechas` | Listado. |
-| PUT | `/api/lote-campanias/{id}/cosechas/{cosechaId}` | Edita. |
-| DELETE | `/api/lote-campanias/{id}/cosechas/{cosechaId}` | Elimina. |
-
-### Ventas y margen
-| Método | Ruta | Descripción |
-|---|---|---|
-| POST | `/api/lote-campanias/{id}/ventas` | Alta (precio cerrado o consignación). |
-| GET | `/api/lote-campanias/{id}/ventas` | Listado. |
-| PUT | `/api/ventas/{id}` | Edita una venta no liquidada. |
-| DELETE | `/api/ventas/{id}` | Elimina. |
-| PATCH | `/api/ventas/{id}/liquidacion` | Liquida una consignación con precio final. |
-| GET | `/api/lote-campanias/{id}/margen` | Margen realizado y estimado. |
-
-### Reportes
-| Método | Ruta | Descripción |
-|---|---|---|
-| GET | `/api/campanias/{id}/resumen` | Costos, ingresos y márgenes por lote-campaña. |
-| GET | `/api/campanias/{id}/costos-por-rubro` | Desglose por rubro (insumos, mano de obra, labores, indirectos). |
-| GET | `/api/reportes/comparativa?cultivo=&campanias=` | Comparativa de un cultivo entre campañas. |
-
-### Metadata
-| Método | Ruta | Descripción |
-|---|---|---|
-| GET | `/api/metadata/enums` | Todos los enums con sus etiquetas en español. |
+Referencia completa de rutas, requests y responses en [`docs/api-endpoints.md`](docs/api-endpoints.md).
 
 ---
 
@@ -167,7 +137,7 @@ Todos soportan `GET` (paginado), `POST`, `PUT /{id}`, `DELETE /{id}` (baja lógi
 
 - **`Monto`** es un value object con `importe`, `moneda`, `tipoCambio`, `importeUsd` e `importeArs`. Todo importe usa `BigDecimal`. Nunca `double` ni `float`.
 - Los **precios se congelan en el movimiento**: modificar el catálogo no altera costos históricos.
-- **Toda consulta filtra por `establecimientoId`**, resuelto desde el JWT. Ningún endpoint acepta el establecimiento del cliente.
+- **Toda consulta filtra por `establecimientoId`**, resuelto desde el usuario autenticado. Ningún endpoint acepta el establecimiento del cliente.
 - Los **controllers nunca exponen entidades JPA**: siempre DTOs como `record`.
 - **Flyway siempre**: `ddl-auto: validate`. Las migraciones aplicadas no se editan.
 - Listados paginados con `Pageable`. Los campos `null` se omiten del JSON (`NON_NULL` global).
@@ -185,3 +155,4 @@ Todos soportan `GET` (paginado), `POST`, `PUT /{id}`, `DELETE /{id}` (baja lógi
 | [`docs/plan.md`](docs/plan.md) | Slices verticales de desarrollo |
 | [`docs/api-endpoints.md`](docs/api-endpoints.md) | Referencia completa de endpoints y shapes |
 | [`docs/adr/`](docs/adr/) | Decisiones de arquitectura |
+| [`docs/despliegue.md`](docs/despliegue.md) | CI/CD, servidor de producción, rollback |

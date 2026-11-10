@@ -225,7 +225,6 @@ En orden tentativo de prioridad para después:
    pulverizaciones
 4. Multi-tenant real (`Organizacion` sobre `Establecimiento`, ver `docs/adr/0003`)
 5. Carga offline desde el celular a pie de lote
-6. Frontend Angular
 
 ---
 
