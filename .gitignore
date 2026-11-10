@@ -41,3 +41,6 @@ application-dev.yaml
 ### Secretos del servidor de produccion ###
 deploy/.env
 deploy/image.env
+
+### Configuracion local de Claude Code ###
+.claude/settings.local.json

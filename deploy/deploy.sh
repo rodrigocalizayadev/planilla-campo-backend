@@ -28,7 +28,7 @@ health_ok() {
 
 # Conserva solo la imagen desplegada y la anterior (para rollback).
 remove_old_images() {
-  image="ghcr.io/rodrigo906/planilla-campo-backend"  # igual que en docker-compose.prod.yml
+  image="ghcr.io/rodrigocalizayadev/planilla-campo-backend"  # igual que en docker-compose.prod.yml
   docker image ls "$image" --format '{{.Tag}}' \
     | grep -vxF -e "$TAG" -e "${PREVIOUS_TAG:-$TAG}" -e '<none>' \
     | while read -r old; do docker rmi "$image:$old" > /dev/null || true; done
