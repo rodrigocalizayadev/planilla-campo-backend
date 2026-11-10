@@ -24,7 +24,7 @@ services:
       start_period: 30s
 
   api:
-    image: ghcr.io/rodrigo906/planilla-campo-backend:${IMAGE_TAG:?falta IMAGE_TAG (lo escribe deploy.sh)}
+    image: ghcr.io/rodrigocalizayadev/planilla-campo-backend:${IMAGE_TAG:?falta IMAGE_TAG (lo escribe deploy.sh)}
     restart: unless-stopped
     depends_on:
       db:
