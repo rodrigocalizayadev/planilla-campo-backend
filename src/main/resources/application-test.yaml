@@ -6,3 +6,8 @@ app:
   jwt:
     secret: "test-secret-key-must-be-at-least-32-chars-long"
     expiration-hours: 1
+  cotizacion:
+    bcra:
+      # Puerto cerrado: ningún test sale a internet. Los tests de cotización levantan un stub propio.
+      base-url: http://localhost:9
+      timeout: 500ms
