@@ -131,6 +131,8 @@ Todos los errores usan el mismo shape (clase `ErrorResponse` en `ErrorAdvice.jav
 }
 ```
 
+- 503 se usa cuando un servicio externo no está disponible (p. ej.
+  `COTIZACION_NO_DISPONIBLE`); no es un error del request.
 - `details` es array vacío en errores de negocio. Contiene strings
   `"campo: mensaje"` en errores de validación (400 `VALIDACION`).
 - Los `Instant` en `timestamp` también aplican la omisión NON_NULL si fueran
@@ -1651,6 +1653,62 @@ Devuelve todos los enums con sus valores y etiquetas en español.
 Los valores exactos están copiados de las clases enum Java. El endpoint los
 construye leyendo reflection sobre el campo `etiqueta` de cada enum.
 (Verificado: `MetadataController.java`, todos los enums.)
+
+---
+
+## 16. Cotizaciones
+
+Cotización del dólar **sugerida** para autocompletar `tipoCambio` en vistas y
+formularios (aplicaciones, tareas, costos indirectos, ventas, cobros, tramos de
+liquidación y `cotizacionVigente` de la campaña). El backend **no** rellena
+`tipoCambio`: sigue siendo obligatorio en cada request. Ver `docs/adr/0004`.
+
+Fuente: API Estadísticas Cambiarias del BCRA, valor **BNA vendedor divisa**.
+
+### GET /api/cotizaciones/dolar
+
+| Query param | Tipo | Regla |
+|---|---|---|
+| `fecha` | `LocalDate` ISO | opcional — por defecto, hoy en Argentina (`America/Argentina/Buenos_Aires`) |
+
+El front debe enviar la **fecha del movimiento**, no la de hoy: el tipo de cambio
+se congela a la fecha del movimiento.
+
+**Response 200** — `CotizacionResponse`:
+
+```json
+{
+  "fechaSolicitada": "2026-11-15",
+  "fechaCotizacion": "2026-11-13",
+  "valor":           1543.500000,
+  "fuente":          "BCRA"
+}
+```
+
+| Campo | Tipo | Significado |
+|---|---|---|
+| `fechaSolicitada` | `LocalDate` | la fecha pedida |
+| `fechaCotizacion` | `LocalDate` | fecha real de la cotización usada; puede ser anterior (fin de semana, feriado o cierre del día aún no publicado) |
+| `valor` | `BigDecimal` | ARS por USD |
+| `fuente` | String | origen del dato (`BCRA`) |
+
+Reglas:
+
+- Si la fecha no tiene publicación se usa la última dentro de los **10 días
+  anteriores**.
+- Las cotizaciones se persisten en la tabla `cotizacion`: una fecha ya consultada
+  no vuelve a llamar al BCRA.
+- Si el BCRA no responde se usa lo persistido dentro de la ventana.
+
+**Errores**
+
+| Status | `code` | Cuándo |
+|---|---|---|
+| 422 | `FECHA_COTIZACION_FUTURA` | `fecha` posterior a hoy |
+| 503 | `COTIZACION_NO_DISPONIBLE` | el BCRA no responde (o no publicó nada) y no hay cotización persistida en la ventana |
+| 401 | — | sin token |
+
+(Verificado: `CotizacionController.java`, `CotizacionService.java`.)
 
 ---
 

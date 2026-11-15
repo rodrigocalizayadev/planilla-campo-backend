@@ -48,6 +48,19 @@ public class ErrorAdvice {
                 ));
     }
 
+    @ExceptionHandler(ServicioExternoNoDisponibleException.class)
+    public ResponseEntity<ErrorResponse> handleServicioExterno(ServicioExternoNoDisponibleException ex) {
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse(
+                        Instant.now(),
+                        503,
+                        ex.getCodigo(),
+                        ex.getMessage(),
+                        List.of()
+                ));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
         List<String> detalles = ex.getBindingResult()

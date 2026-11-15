@@ -159,6 +159,12 @@ com.planillacampo
 │   ├── VentaMapper.java
 │   ├── CobroMapper.java
 │   └── LiquidacionVentaMapper.java
+├── cotizacion/          cotización del dólar sugerida (BCRA), dato global
+│   ├── entities/        Cotizacion
+│   ├── repositories/    CotizacionRepository
+│   ├── controllers/     CotizacionController
+│   ├── services/        CotizacionService, CotizacionBcraClient
+│   └── dto/
 ├── reportes/            cálculo de costos, márgenes, comparativas
 │   ├── controllers/     ReportesController
 │   ├── services/        ReportesService
