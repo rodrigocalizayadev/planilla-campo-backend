@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 public class CotizacionService {
 
     static final ZoneId ZONA_ARGENTINA = ZoneId.of("America/Argentina/Buenos_Aires");
-    static final int VENTANA_DIAS = 10;
+    static final int VENTANA_DIAS = 7;
     static final String FUENTE_BCRA = "BCRA";
 
     private final CotizacionRepository cotizacionRepository;
