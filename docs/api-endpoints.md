@@ -57,14 +57,15 @@ Query params de paginación (Spring Data Pageable): `page` (default 0), `size`
 (Verificado: DTOs de cada feature, `EntidadBase.java`.)
 
 ### Serialización de BigDecimal
-El `ObjectMapper` global **no** tiene configurado ningún serializer custom para
-`BigDecimal`. La única configuración de Jackson en `application.yaml` es
-`spring.jackson.default-property-inclusion: non_null`. Por lo tanto:
+El `ObjectMapper` global registra un módulo propio (`JacksonConfig.bigDecimalAsStringModule`):
 
-- **Todos los campos `BigDecimal`** se serializan como **número JSON** (no string).
-  Ejemplo: `123.5000` → `123.5000` en el JSON (preserva la escala del valor).
-- No hay `@JsonFormat` sobre ningún campo `BigDecimal` en ningún DTO.
-- (Verificado: todos los DTOs, `application.yaml`.)
+- **Todos los campos `BigDecimal`** se serializan como **string JSON** con
+  `toPlainString()`, preservando la escala. Ejemplo: `1543.5000` → `"1543.5000"`.
+  Evita la pérdida de precisión de los números IEEE 754 en clientes JavaScript.
+- En los requests se aceptan tanto string como número.
+- Algunos ejemplos de este documento muestran números por brevedad; la respuesta
+  real siempre es string.
+- (Verificado: `JacksonConfig.java`; `CotizacionIntegrationTest` lo fija para `valor`.)
 
 ### Omisión de campos null (NON_NULL global)
 `application.yaml` configura `default-property-inclusion: non_null`. Esto
@@ -1680,7 +1681,7 @@ se congela a la fecha del movimiento.
 {
   "fechaSolicitada": "2026-11-15",
   "fechaCotizacion": "2026-11-13",
-  "valor":           1543.500000,
+  "valor":           "1543.5000",
   "fuente":          "BCRA"
 }
 ```
@@ -1689,7 +1690,7 @@ se congela a la fecha del movimiento.
 |---|---|---|
 | `fechaSolicitada` | `LocalDate` | la fecha pedida |
 | `fechaCotizacion` | `LocalDate` | fecha real de la cotización usada; puede ser anterior (fin de semana, feriado o cierre del día aún no publicado) |
-| `valor` | `BigDecimal` | ARS por USD |
+| `valor` | `BigDecimal` (string) | ARS por USD, 4 decimales (HALF_UP al persistir) |
 | `fuente` | String | origen del dato (`BCRA`) |
 
 Reglas:

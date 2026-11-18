@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -19,8 +20,10 @@ import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -72,6 +75,17 @@ class CotizacionIntegrationTest extends IntegrationTestBase {
         // Se persiste todo lo publicado en la ventana, no solo la fecha pedida
         assertThat(jdbc.queryForList("SELECT fecha FROM cotizacion ORDER BY fecha", LocalDate.class))
                 .containsExactly(LocalDate.of(2026, 11, 12), LocalDate.of(2026, 11, 13));
+    }
+
+    @Test
+    void el_valor_se_expone_como_string_redondeado_a_4_decimales() {
+        BCRA.responderCotizaciones("2026-11-13", "1547.03367000");
+
+        Map<String, Object> json = pedirDolar("2026-11-13").body(new ParameterizedTypeReference<>() {});
+
+        assertThat(json).containsEntry("valor", "1547.0337");
+        assertThat(jdbc.queryForObject("SELECT valor FROM cotizacion", BigDecimal.class))
+                .isEqualTo(new BigDecimal("1547.0337"));
     }
 
     @Test

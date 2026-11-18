@@ -33,8 +33,8 @@ public class Cotizacion extends EntidadBase {
     @Column(nullable = false, length = 3)
     private Moneda moneda;
 
-    /** ARS por unidad de moneda. */
-    @Column(nullable = false, precision = 12, scale = 6)
+    /** ARS por unidad de moneda. Misma precisión que todo tipo de cambio (4 decimales). */
+    @Column(nullable = false, precision = 12, scale = 4)
     private BigDecimal valor;
 
     @Column(nullable = false, length = 20)

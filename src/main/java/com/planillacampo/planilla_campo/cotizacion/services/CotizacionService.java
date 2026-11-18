@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -35,6 +36,8 @@ public class CotizacionService {
     static final ZoneId ZONA_ARGENTINA = ZoneId.of("America/Argentina/Buenos_Aires");
     static final int VENTANA_DIAS = 7;
     static final String FUENTE_BCRA = "BCRA";
+    /** Misma escala que todo tipo de cambio (V14). */
+    static final int ESCALA_VALOR = 4;
 
     private final CotizacionRepository cotizacionRepository;
     private final CotizacionBcraClient bcraClient;
@@ -79,7 +82,7 @@ public class CotizacionService {
             Cotizacion cotizacion = new Cotizacion();
             cotizacion.setFecha(publicada.fecha());
             cotizacion.setMoneda(Moneda.USD);
-            cotizacion.setValor(publicada.valor());
+            cotizacion.setValor(publicada.valor().setScale(ESCALA_VALOR, RoundingMode.HALF_UP));
             cotizacion.setFuente(FUENTE_BCRA);
             try {
                 cotizacionRepository.saveAndFlush(cotizacion);
