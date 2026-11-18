@@ -32,7 +32,7 @@ vendedor divisa, así que se descarta.
    el precio de catálogo: referencia para autocompletar.
 3. **Fecha del movimiento, no la de hoy.** Si la fecha no tiene cotización (fin
    de semana, feriado, o el cierre del día todavía no se publicó), se usa la
-   última cotización publicada dentro de los 10 días anteriores, informando su
+   última cotización publicada dentro de los 7 días anteriores, informando su
    fecha real (`fechaCotizacion`).
 4. **Caché persistente en MySQL** (tabla `cotizacion`). Una cotización publicada
    no cambia, así que se guarda para siempre y no se vuelve a pedir. La clave es

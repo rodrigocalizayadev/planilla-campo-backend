@@ -1694,7 +1694,7 @@ se congela a la fecha del movimiento.
 
 Reglas:
 
-- Si la fecha no tiene publicación se usa la última dentro de los **10 días
+- Si la fecha no tiene publicación se usa la última dentro de los **7 días
   anteriores**.
 - Las cotizaciones se persisten en la tabla `cotizacion`: una fecha ya consultada
   no vuelve a llamar al BCRA.

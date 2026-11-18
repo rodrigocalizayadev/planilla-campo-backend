@@ -68,7 +68,7 @@ class CotizacionIntegrationTest extends IntegrationTestBase {
         assertThat(cotizacion.valor()).isEqualByComparingTo("1543.50");
         assertThat(cotizacion.fuente()).isEqualTo("BCRA");
         assertThat(BCRA.consultas()).containsExactly(
-                "/estadisticascambiarias/v1.0/Cotizaciones/USD?fechaDesde=2026-11-03&fechaHasta=2026-11-13");
+                "/estadisticascambiarias/v1.0/Cotizaciones/USD?fechaDesde=2026-11-06&fechaHasta=2026-11-13");
         // Se persiste todo lo publicado en la ventana, no solo la fecha pedida
         assertThat(jdbc.queryForList("SELECT fecha FROM cotizacion ORDER BY fecha", LocalDate.class))
                 .containsExactly(LocalDate.of(2026, 11, 12), LocalDate.of(2026, 11, 13));
@@ -185,7 +185,7 @@ class CotizacionIntegrationTest extends IntegrationTestBase {
         assertThat(cotizacion.valor()).isEqualByComparingTo("1550.00");
         assertThat(BCRA.consultas()).containsExactly(
                 "/estadisticascambiarias/v1.0/Cotizaciones/USD?fechaDesde=%s&fechaHasta=%s"
-                        .formatted(hoy.minusDays(10), hoy));
+                        .formatted(hoy.minusDays(7), hoy));
     }
 
     @Test
