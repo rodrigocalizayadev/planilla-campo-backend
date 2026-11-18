@@ -232,6 +232,9 @@ El productor opera en **pesos y dólares**. Todo importe es un value object `Mon
 con `importe`, `moneda` y `tipoCambio`.
 
 - El tipo de cambio se **congela con el movimiento**, no se recalcula nunca.
+- El sistema **sugiere** la cotización BNA vendedor divisa de la fecha del
+  movimiento (fuente: API del BCRA) para autocompletar el formulario, pero el
+  valor lo confirma el usuario y viaja en el request (ver `docs/adr/0004`).
 - Se persiste además `importeUsd` para poder agregar y comparar campañas: no se
   puede hacer `SUM` sobre importes en monedas mezcladas.
 - Todo importe usa `BigDecimal` en Java y `DECIMAL` en MySQL. **Nunca `double`

@@ -15,10 +15,10 @@ mal o el documento tiene que actualizarse deliberadamente.
 
 | Concepto | Java | MySQL |
 |---|---|---|
-| Importes | `BigDecimal` | `DECIMAL(15,4)` |
-| Superficies (ha) | `BigDecimal` | `DECIMAL(10,4)` |
-| Cantidades | `BigDecimal` | `DECIMAL(14,4)` |
-| Tipo de cambio | `BigDecimal` | `DECIMAL(12,6)` |
+| Importes | `BigDecimal` | `DECIMAL(20,2)` |
+| Superficies (ha) | `BigDecimal` | `DECIMAL(12,2)` |
+| Cantidades | `BigDecimal` | `DECIMAL(12,2)` |
+| Tipo de cambio | `BigDecimal` | `DECIMAL(12,4)` |
 
 **Nunca `double` ni `float` para nada de lo anterior.**
 
