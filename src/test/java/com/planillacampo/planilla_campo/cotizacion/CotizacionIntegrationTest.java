@@ -79,7 +79,8 @@ class CotizacionIntegrationTest extends IntegrationTestBase {
 
     @Test
     void el_valor_se_expone_como_string_redondeado_a_4_decimales() {
-        BCRA.responderCotizaciones("2026-11-13", "1547.03367000");
+        // Valor en el empate: HALF_UP da 1547.0337, HALF_EVEN daría 1547.0336
+        BCRA.responderCotizaciones("2026-11-13", "1547.03365000");
 
         Map<String, Object> json = pedirDolar("2026-11-13").body(new ParameterizedTypeReference<>() {});
 
