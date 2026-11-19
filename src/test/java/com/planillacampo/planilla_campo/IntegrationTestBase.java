@@ -65,6 +65,7 @@ public abstract class IntegrationTestBase {
         jdbc.execute("TRUNCATE TABLE cultivo");
         jdbc.execute("TRUNCATE TABLE establecimiento");
         jdbc.execute("TRUNCATE TABLE usuario");
+        jdbc.execute("TRUNCATE TABLE cotizacion");
         jdbc.execute("SET FOREIGN_KEY_CHECKS = 1");
     }
 }

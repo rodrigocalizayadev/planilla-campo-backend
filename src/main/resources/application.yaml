@@ -16,6 +16,10 @@ spring:
 app:
   jwt:
     expiration-hours: 24
+  cotizacion:
+    bcra:
+      base-url: https://api.bcra.gob.ar
+      timeout: 5s
 
 management:
   endpoints:

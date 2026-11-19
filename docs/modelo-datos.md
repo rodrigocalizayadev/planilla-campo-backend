@@ -14,11 +14,11 @@ AUTO_INCREMENT`, enums como `VARCHAR` con `@Enumerated(EnumType.STRING)`.
 
 | Campo | Tipo Java | Columna | Tipo SQL |
 |---|---|---|---|
-| `importe` | `BigDecimal` | `{p}_importe` | `DECIMAL(15,4) NOT NULL` |
+| `importe` | `BigDecimal` | `{p}_importe` | `DECIMAL(20,2) NOT NULL` |
 | `moneda` | `Moneda` | `{p}_moneda` | `VARCHAR(3) NOT NULL` |
-| `tipoCambio` | `BigDecimal` | `{p}_tipo_cambio` | `DECIMAL(12,6) NOT NULL` |
-| `importeUsd` | `BigDecimal` | `{p}_importe_usd` | `DECIMAL(15,4) NOT NULL` |
-| `importeArs` | `BigDecimal` | `{p}_importe_ars` | `DECIMAL(15,4) NOT NULL` |
+| `tipoCambio` | `BigDecimal` | `{p}_tipo_cambio` | `DECIMAL(12,4) NOT NULL` |
+| `importeUsd` | `BigDecimal` | `{p}_importe_usd` | `DECIMAL(20,2) NOT NULL` |
+| `importeArs` | `BigDecimal` | `{p}_importe_ars` | `DECIMAL(20,2) NOT NULL` |
 
 `{p}` es el prefijo del atributo (`costo_total`, `precio_unitario`, ...).
 `importeUsd` e `importeArs` se calculan al construir el `Monto` y se persisten;
@@ -409,6 +409,23 @@ mecanismo: `CONSIGNACION` admite tramos; `PRECIO_CERRADO` no (usa `cobro`).
 
 Índice `(venta_id)`.
 
+### 3.17 `cotizacion`
+
+Cotización publicada por el BCRA (V17), usada solo para **sugerir** `tipoCambio`
+(ver `docs/adr/0004`). Dato público y global: **no** tiene `establecimiento_id`
+(única excepción a la ADR 0003).
+
+| Campo | Tipo | Restricciones |
+|---|---|---|
+| `id` | `BIGINT` | PK |
+| `fecha` | `DATE` | `NOT NULL`. Fecha real de publicación |
+| `moneda` | `VARCHAR(3)` | `NOT NULL` (`USD`) |
+| `valor` | `DECIMAL(12,4)` | `NOT NULL`, `> 0`. ARS por unidad (BNA vendedor divisa) |
+| `fuente` | `VARCHAR(20)` | `NOT NULL` (`BCRA`) |
+
+- Unique `(fecha, moneda)`. Una cotización publicada no cambia: no se actualiza ni se borra.
+- Ningún movimiento la referencia: cada movimiento congela su propio `tipoCambio`.
+
 ---
 
 ## 4. Diagrama de relaciones
@@ -460,6 +477,8 @@ declarados explícitamente en cada `CREATE TABLE`.
 | `V14__ampliar_precision_montos_cantidades.sql` | amplía la precisión de montos y cantidades |
 | `V15__cobro_venta.sql` | tabla `cobro`; agrega `cobrado_ars` y `estado_cobro` a `venta`; migra las ventas a precio cerrado existentes como `COBRADA` con un cobro por el total en `fecha_entrega` |
 | `V16__liquidacion_venta.sql` | tabla `liquidacion_venta`; agrega `cantidad_liquidada` a `venta`; migra cada consignación `LIQUIDADA` existente a un único tramo por la cantidad total |
+| `V17__cotizacion.sql` | tabla `cotizacion` (caché global de cotizaciones del BCRA, sin `establecimiento_id`) |
+| `V18__cotizacion_valor_4_decimales.sql` | reduce `cotizacion.valor` a `DECIMAL(12,4)`, la misma precisión que todo tipo de cambio (V14) |
 
 Una migración por slice del plan. Las aplicadas no se editan nunca: toda
 corrección es una versión nueva.

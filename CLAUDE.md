@@ -159,6 +159,12 @@ com.planillacampo
 │   ├── VentaMapper.java
 │   ├── CobroMapper.java
 │   └── LiquidacionVentaMapper.java
+├── cotizacion/          cotización del dólar sugerida (BCRA), dato global
+│   ├── entities/        Cotizacion
+│   ├── repositories/    CotizacionRepository
+│   ├── controllers/     CotizacionController
+│   ├── services/        CotizacionService, CotizacionBcraClient
+│   └── dto/
 ├── reportes/            cálculo de costos, márgenes, comparativas
 │   ├── controllers/     ReportesController
 │   ├── services/        ReportesService
@@ -211,6 +217,7 @@ Estas no se negocian. Si algo en el código las viola, es un bug.
 12. **Toda consulta filtra por `establecimiento`.** Sin excepción, incluso con un
     solo establecimiento en la base. Los métodos de repositorio siempre reciben el
     `establecimientoId`: `findByEstablecimientoIdAnd...`. Ver `docs/adr/0003`.
+    Única excepción: `cotizacion` es un dato público global (ver `docs/adr/0004`).
 13. Ningún endpoint acepta un `establecimientoId` del cliente: se resuelve desde
     el usuario autenticado.
 
